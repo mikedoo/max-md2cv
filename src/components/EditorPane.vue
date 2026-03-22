@@ -84,6 +84,21 @@ const focusEditor = () => {
   view?.focus()
 }
 
+const jumpToLine = (lineNumber: number) => {
+  if (!view) {
+    return
+  }
+
+  const boundedLine = Math.max(1, Math.min(lineNumber, view.state.doc.lines))
+  const targetLine = view.state.doc.line(boundedLine)
+
+  view.dispatch({
+    selection: { anchor: targetLine.from, head: targetLine.from },
+    effects: EditorView.scrollIntoView(targetLine.from, { y: 'center' }),
+  })
+  focusEditor()
+}
+
 const insertManualPageBreak = () => {
   if (!view) return
 
@@ -381,6 +396,18 @@ watch(() => store.markdownContent, (newVal) => {
   })
   isExternalUpdate = false
 })
+
+watch(
+  () => store.editorJumpRequest?.token,
+  () => {
+    if (!store.editorJumpRequest) {
+      return
+    }
+
+    jumpToLine(store.editorJumpRequest.line)
+    store.clearEditorJumpRequest()
+  },
+)
 </script>
 
 <template>

@@ -8,6 +8,6 @@ const MANUAL_PAGE_BREAK_LINE_RE = new RegExp(
 export const renderManualPageBreaks = (markdown: string) => {
   return markdown.replace(
     MANUAL_PAGE_BREAK_LINE_RE,
-    '<div class="manual-page-break" aria-hidden="true"></div>',
+    '\n\n<div class="manual-page-break" aria-hidden="true"></div>\n\n',
   )
 }

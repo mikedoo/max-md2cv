@@ -3,7 +3,12 @@ import { join } from "@tauri-apps/api/path";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ElMessage } from "element-plus";
 import { defineStore } from "pinia";
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import {
+  parseMarkdownOutline,
+  reorderOutlineSiblings,
+  type ResumeOutlineNode,
+} from "../utils/markdownOutline";
 
 export interface ResumeTemplate {
   id: string;
@@ -33,6 +38,13 @@ export interface ResumeStyle {
   marginV: number;
   marginH: number;
   personalInfoMode?: "text" | "icon";
+}
+
+export type SidebarPrimaryView = "library" | "outline";
+
+export interface EditorJumpRequest {
+  line: number;
+  token: number;
 }
 
 const DEFAULT_MARKDOWN = "";
@@ -89,10 +101,13 @@ export const useResumeStore = defineStore("resume", () => {
   const pdfFileList = ref<FileItem[]>([]);
   const photoFileList = ref<PhotoItem[]>([]);
   const activeFilePath = ref<string | null>(null);
+  const sidebarPrimaryView = ref<SidebarPrimaryView>("library");
   const isSidebarOpen = ref(false);
   const shouldShowWorkspaceDialog = ref(false);
   const currentPhotoPath = ref<string | null>(null);
   const photoBase64 = ref<string | null>(null);
+  const editorJumpRequest = ref<EditorJumpRequest | null>(null);
+  const editorJumpToken = ref(0);
 
   const clearPhotoState = () => {
     currentPhotoPath.value = null;
@@ -107,6 +122,8 @@ export const useResumeStore = defineStore("resume", () => {
     photoFileList.value = [];
     activeFilePath.value = null;
     markdownContent.value = DEFAULT_MARKDOWN;
+    sidebarPrimaryView.value = "library";
+    editorJumpRequest.value = null;
     clearPhotoState();
     removeStorageItem(STORAGE_KEYS.workspacePath);
     removeStorageItem(STORAGE_KEYS.lastOpenedPath);
@@ -342,6 +359,7 @@ export const useResumeStore = defineStore("resume", () => {
       const content = await invoke<string>("read_resume", { path });
       markdownContent.value = content;
       activeFilePath.value = path;
+      editorJumpRequest.value = null;
       setLastOpenedPath(path);
     } catch (error) {
       console.error("Failed to read file:", error);
@@ -371,6 +389,15 @@ export const useResumeStore = defineStore("resume", () => {
       console.error("Failed to save file:", error);
       ElMessage.error("保存文件失败");
     }
+  };
+
+  const replaceMarkdownFromOutline = async (nextMarkdown: string) => {
+    if (markdownContent.value === nextMarkdown) {
+      return;
+    }
+
+    markdownContent.value = nextMarkdown;
+    await saveCurrentFile(true);
   };
 
   const createFile = async (name: string) => {
@@ -513,6 +540,51 @@ export const useResumeStore = defineStore("resume", () => {
     }
   };
 
+  const outlineResult = computed(() => parseMarkdownOutline(markdownContent.value));
+  const outlineTree = computed<ResumeOutlineNode[]>(() => outlineResult.value.tree);
+  const activeFileName = computed(() => {
+    if (!activeFilePath.value) {
+      return "";
+    }
+
+    return activeFilePath.value.split(/[/\\]/).pop()?.replace(/\.md$/, "") ?? "";
+  });
+
+  const moveOutlineNode = async (
+    nodeId: string,
+    targetIndex: number,
+    parentId: string | null,
+  ) => {
+    const nextMarkdown = reorderOutlineSiblings(
+      markdownContent.value,
+      nodeId,
+      targetIndex,
+      parentId,
+    );
+
+    if (nextMarkdown === markdownContent.value) {
+      return;
+    }
+
+    await replaceMarkdownFromOutline(nextMarkdown);
+  };
+
+  const requestEditorJump = (nodeId: string) => {
+    const targetNode = outlineResult.value.nodesById.get(nodeId);
+    if (!targetNode) {
+      return;
+    }
+
+    editorJumpRequest.value = {
+      line: targetNode.startLine,
+      token: ++editorJumpToken.value,
+    };
+  };
+
+  const clearEditorJumpRequest = () => {
+    editorJumpRequest.value = null;
+  };
+
   const initWorkspace = async () => {
     const savedWorkspace = localStorage.getItem(STORAGE_KEYS.workspacePath);
     if (!savedWorkspace) {
@@ -553,12 +625,17 @@ export const useResumeStore = defineStore("resume", () => {
     pdfFileList,
     photoFileList,
     activeFilePath,
+    activeFileName,
+    outlineTree,
+    sidebarPrimaryView,
     isSidebarOpen,
     shouldShowWorkspaceDialog,
     currentPhotoPath,
+    editorJumpRequest,
     selectWorkspace,
     openFile,
     saveCurrentFile,
+    replaceMarkdownFromOutline,
     createFile,
     deleteFile,
     deletePdf,
@@ -570,6 +647,9 @@ export const useResumeStore = defineStore("resume", () => {
     selectPhoto,
     importIdPhoto,
     deletePhoto,
+    moveOutlineNode,
+    requestEditorJump,
+    clearEditorJumpRequest,
     photoBase64,
   };
 });
