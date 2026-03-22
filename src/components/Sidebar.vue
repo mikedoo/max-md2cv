@@ -22,10 +22,6 @@ const currentPhotoName = computed(() => {
   return current?.name ?? ''
 })
 
-const otherPhotoFiles = computed(() =>
-  store.photoFileList.filter((file) => file.path !== store.currentPhotoPath)
-)
-
 const handleSelectWorkspace = async () => {
   await store.selectWorkspace()
 }
@@ -385,12 +381,127 @@ const confirmDelete = () => {
         </el-tab-pane>
 
         <el-tab-pane label="证件照" name="photo">
-          <div class="h-full px-4 pb-6 pt-3 flex items-center justify-center text-center text-on-surface-variant">
-            <div class="max-w-[220px] space-y-3 opacity-80">
+          <div class="h-full px-4 pb-6 pt-3">
+            <div v-if="false" class="max-w-[220px] space-y-3 opacity-80">
               <div class="w-16 h-16 mx-auto rounded-full bg-surface-container flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">add_a_photo</span>
               </div>
               <p class="text-sm font-medium">证件照功能开发中...</p>
+            </div>
+            <div v-if="!store.workspacePath" class="h-full flex flex-col items-center justify-center text-center text-on-surface-variant gap-4 opacity-70">
+              <div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center">
+                <span class="material-symbols-outlined text-3xl">add_a_photo</span>
+              </div>
+              <p class="text-sm font-medium">选择工作文件夹后显示证件照</p>
+            </div>
+
+            <div v-else class="h-full flex flex-col gap-4">
+              <button
+                class="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl transition-all duration-200 cursor-pointer text-sm font-medium shadow-sm"
+                :style="{
+                  backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
+                  color: store.resumeStyle.themeColor,
+                }"
+                @click="handlePhotoImport"
+              >
+                <span class="material-symbols-outlined text-lg">upload</span>
+                <span>上传证件照</span>
+              </button>
+
+              <div class="rounded-[24px] bg-surface-container p-4 shadow-sm">
+                <div class="flex items-center justify-between gap-3 mb-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-on-surface">当前证件照</p>
+                    <p class="text-xs text-on-surface-variant truncate">
+                      {{ currentPhotoName || '当前目录暂无已选证件照' }}
+                    </p>
+                  </div>
+                  <span
+                    v-if="store.currentPhotoPath"
+                    class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                    :style="{
+                      backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 12%, white)`,
+                      color: store.resumeStyle.themeColor,
+                    }"
+                  >
+                    自动套用
+                  </span>
+                </div>
+
+                <div class="aspect-[3/4] rounded-[20px] bg-surface-container-lowest overflow-hidden flex items-center justify-center">
+                  <img
+                    v-if="store.photoBase64"
+                    :src="store.photoBase64"
+                    alt="当前证件照"
+                    class="w-full h-full object-cover"
+                  />
+                  <div v-else class="px-5 text-center text-on-surface-variant">
+                    <span class="material-symbols-outlined text-3xl mb-2 block">gallery_thumbnail</span>
+                    <p class="text-sm font-medium">当前文件夹还没有可用证件照</p>
+                  </div>
+                </div>
+
+                <p class="mt-3 text-xs leading-5 text-on-surface-variant">
+                  上传后会保存到当前工作文件夹，并规范命名为 `IDphoto`、`IDphoto-2` 等。目录中已有该命名的图片时，会自动应用到所有简历。
+                </p>
+              </div>
+
+              <div class="min-h-0 flex-1 rounded-[24px] bg-surface-container/80 p-3 shadow-sm">
+                <div class="flex items-center justify-between px-1 pb-2">
+                  <p class="text-sm font-semibold text-on-surface">目录中的图片</p>
+                  <span class="text-xs text-on-surface-variant">{{ store.photoFileList.length }} 张</span>
+                </div>
+
+                <div
+                  v-if="store.photoFileList.length === 0"
+                  class="h-[160px] flex flex-col items-center justify-center text-center text-on-surface-variant gap-3 opacity-70"
+                >
+                  <span class="material-symbols-outlined text-3xl">imagesmode</span>
+                  <p class="text-sm font-medium">当前文件夹暂无图片文件</p>
+                </div>
+
+                <ul v-else class="h-full flex flex-col gap-2 overflow-y-auto custom-scrollbar pr-1">
+                  <li
+                    v-for="file in store.photoFileList"
+                    :key="file.path"
+                  >
+                    <button
+                      class="w-full flex items-center justify-between gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-200"
+                      :class="store.currentPhotoPath === file.path ? 'shadow-sm' : 'hover:bg-surface-container-highest/70'"
+                      :style="
+                        store.currentPhotoPath === file.path
+                          ? {
+                              backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 12%, white)`,
+                              color: store.resumeStyle.themeColor,
+                            }
+                          : undefined
+                      "
+                      @click="handlePhotoClick(file.path)"
+                    >
+                      <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium truncate">{{ file.name }}</p>
+                        <p class="text-xs truncate" :class="store.currentPhotoPath === file.path ? 'text-current/70' : 'text-on-surface-variant'">
+                          {{ file.path }}
+                        </p>
+                      </div>
+                      <span
+                        class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                        :class="file.isIdPhoto ? '' : 'bg-surface-container-highest text-on-surface-variant'"
+                        :style="
+                          file.isIdPhoto
+                            ? {
+                                backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
+                                color: store.resumeStyle.themeColor,
+                              }
+                            : undefined
+                        "
+                      >
+                        {{ file.isIdPhoto ? 'IDphoto' : '其他图片' }}
+                      </span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </el-tab-pane>

@@ -35,7 +35,7 @@ export interface ResumeStyle {
   lineHeight: number;
   marginV: number;    // mm
   marginH: number;    // mm
-  jobIntentionColor?: string; // override color
+  personalInfoMode?: "text" | "icon";
 }
 
 export const useResumeStore = defineStore("resume", () => {
@@ -58,7 +58,8 @@ export const useResumeStore = defineStore("resume", () => {
     dateWeight: '',
     lineHeight: 1.6,
     marginV: 10,
-    marginH: 12
+    marginH: 12,
+    personalInfoMode: "text",
   });
 
   // File management states
@@ -390,7 +391,7 @@ export const useResumeStore = defineStore("resume", () => {
     const style = resumeStyle.value;
     const marker = '/* @user-overrides */';
     const baseCSS = tpl.css.split(marker)[0].trimEnd();
-    const patchCSS = `\n\n${marker}\n.resume-document {\n  font-family: ${style.fontFamily};\n  font-size: ${style.fontSize}px;\n  line-height: ${style.lineHeight};\n}\n.resume-document h1 { font-size: ${style.h1Size}px; }\n.resume-document h2 { font-size: ${style.h2Size}px; }\n.resume-document h3 { font-size: ${style.h3Size}px; }\n@page { margin: ${style.marginV}mm ${style.marginH}mm; }\n.resume-document h2 { border-left-color: ${style.themeColor}; background-color: color-mix(in srgb, ${style.themeColor} 10%, transparent); }\n`;
+    const patchCSS = `\n\n${marker}\n.resume-document {\n  font-family: ${style.fontFamily};\n  font-size: ${style.fontSize}px;\n  line-height: ${style.lineHeight};\n  --cv-contact-render: ${style.personalInfoMode || "text"};\n}\n.resume-document h1 { font-size: ${style.h1Size}px; }\n.resume-document h2 { font-size: ${style.h2Size}px; }\n.resume-document h3 { font-size: ${style.h3Size}px; }\n@page { margin: ${style.marginV}mm ${style.marginH}mm; }\n.resume-document h2 { border-left-color: ${style.themeColor}; background-color: color-mix(in srgb, ${style.themeColor} 10%, transparent); }\n`;
     const newCSS = baseCSS + patchCSS;
     try {
       await invoke("save_template", { id: tpl.id, css: newCSS });

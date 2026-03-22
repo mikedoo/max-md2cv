@@ -8,6 +8,7 @@
   color: #333;
   line-height: var(--cv-line-height, 1.6);
   font-family: var(--cv-font-family, sans-serif);
+  --cv-contact-render: icon;
   position: relative;
 }
 
@@ -108,4 +109,37 @@
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+.resume-document .contact-info--icon {
+  color: #111;
+  font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+
+.resume-document .contact-info-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  line-height: 1.2;
+}
+
+.resume-document .contact-info-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: #111;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resume-document .contact-info-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }

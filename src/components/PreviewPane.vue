@@ -12,7 +12,6 @@ const previewContainer = ref<HTMLElement | null>(null)
 let paged: any = null
 
 const photoInput = ref<HTMLInputElement | null>(null)
-const jobColorInput = ref<HTMLInputElement | null>(null)
 
 const handlePhotoUpload = (e: Event) => {
   const target = e.target as HTMLInputElement
@@ -89,8 +88,6 @@ onMounted(async () => {
       const target = e.target as HTMLElement
       if (target.closest('.resume-photo-wrapper')) {
         store.importIdPhoto()
-      } else if (target.closest('.job-intention')) {
-        jobColorInput.value?.click()
       }
     })
   }
@@ -173,6 +170,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     --cv-photo-gap: 18px;
     --cv-photo-radius: 8px;
     --cv-photo-reserve: calc(var(--cv-photo-width) + var(--cv-photo-gap));
+    --cv-contact-render: ${cvStyle.personalInfoMode || 'text'};
     font-family: ${cvStyle.fontFamily} !important;
     font-size: ${cvStyle.fontSize}px !important;
     line-height: ${cvStyle.lineHeight} !important;
@@ -320,6 +318,9 @@ const syncDefaultsFromTemplate = () => {
   const marginParts = pageMarginRaw.match(/([\d.]+)/g) ?? []
   store.resumeStyle.marginV = marginParts.length >= 1 ? parseFloat(marginParts[0] as string) : 10
   store.resumeStyle.marginH = marginParts.length >= 2 ? parseFloat(marginParts[1] as string) : 12
+
+  const contactRenderMode = extractCssProp(css, '.resume-document', '--cv-contact-render', 'text')
+  store.resumeStyle.personalInfoMode = contactRenderMode === 'icon' ? 'icon' : 'text'
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -347,7 +348,7 @@ const renderPdfPreview = async (markdownText: string) => {
     </div>
   `
 
-  let finalHtml = enhanceResumeHtml(htmlContent, store.resumeStyle)
+  let finalHtml = enhanceResumeHtml(htmlContent, store.resumeStyle, store.activeTemplate)
 
   const sourceDiv = document.createElement('div')
   sourceDiv.innerHTML = `<div class="resume-document">${photoHtml}${finalHtml}</div>`
@@ -398,13 +399,6 @@ watch(() => store.resumeStyle, () => {
       accept="image/*" 
       class="hidden" 
       @change="handlePhotoUpload" 
-    />
-    <input 
-      type="color" 
-      ref="jobColorInput" 
-      class="hidden" 
-      :value="store.resumeStyle.jobIntentionColor || store.resumeStyle.themeColor"
-      @input="(e) => store.resumeStyle.jobIntentionColor = (e.target as HTMLInputElement).value" 
     />
 
     <!-- Preview Controls -->
@@ -499,6 +493,17 @@ watch(() => store.resumeStyle, () => {
             </div>
           </div>
         </el-popover>
+
+        <el-select
+          v-if="store.activeTemplate === 'modern'"
+          v-model="store.resumeStyle.personalInfoMode"
+          size="small"
+          style="width: 108px"
+          placeholder="个人信息"
+        >
+          <el-option label="文本" value="text" />
+          <el-option label="图标" value="icon" />
+        </el-select>
 
         <!-- Font Size Dropdown -->
         <el-dropdown trigger="click" :hide-on-click="false">
