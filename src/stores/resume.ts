@@ -1,9 +1,9 @@
+import { invoke } from "@tauri-apps/api/core";
+import { join } from "@tauri-apps/api/path";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { ElMessage } from "element-plus";
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { join } from "@tauri-apps/api/path";
-import { ElMessage } from "element-plus";
 
 export interface ResumeTemplate {
   id: string;
@@ -20,49 +20,70 @@ export interface PhotoItem extends FileItem {
   isIdPhoto: boolean;
 }
 
-const DEFAULT_MARKDOWN = "";
-const LAST_PHOTO_PATH_KEY = "resume-last-photo-path";
-
 export interface ResumeStyle {
   themeColor: string;
   fontFamily: string;
-  fontSize: number;   // body font size in px
-  h1Size: number;     // H1 size in px
-  h2Size: number;     // H2 size in px
-  h3Size: number;     // H3 size in px
-  dateSize?: number;  // Date size in px
-  dateWeight?: string;// Date font weight (CSS)
+  fontSize: number;
+  h1Size: number;
+  h2Size: number;
+  h3Size: number;
+  dateSize?: number;
+  dateWeight?: string;
   lineHeight: number;
-  marginV: number;    // mm
-  marginH: number;    // mm
+  marginV: number;
+  marginH: number;
   personalInfoMode?: "text" | "icon";
 }
+
+const DEFAULT_MARKDOWN = "";
+const DEFAULT_FILE_NAME = "未命名.md";
+const DEFAULT_TEMPLATE_ID = "modern";
+
+const STORAGE_KEYS = {
+  workspacePath: "resume-workspace-path",
+  lastOpenedPath: "resume-last-opened-path",
+  lastPhotoPath: "resume-last-photo-path",
+} as const;
+
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "bmp", "gif"];
+
+const createDefaultResumeStyle = (): ResumeStyle => ({
+  themeColor: "#4c49cc",
+  fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+  fontSize: 14,
+  h1Size: 28,
+  h2Size: 20,
+  h3Size: 16,
+  dateSize: 14,
+  dateWeight: "",
+  lineHeight: 1.6,
+  marginV: 10,
+  marginH: 12,
+  personalInfoMode: "text",
+});
+
+const ensureMarkdownFileName = (name: string) => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return DEFAULT_FILE_NAME;
+  }
+
+  return trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
+};
+
+const removeStorageItem = (key: string) => {
+  localStorage.removeItem(key);
+};
 
 export const useResumeStore = defineStore("resume", () => {
   const markdownContent = ref(DEFAULT_MARKDOWN);
 
   const availableTemplates = ref<ResumeTemplate[]>([]);
-  const activeTemplate = ref("modern");
+  const activeTemplate = ref(DEFAULT_TEMPLATE_ID);
   const isExporting = ref(false);
   const templatesLoaded = ref(false);
+  const resumeStyle = ref<ResumeStyle>(createDefaultResumeStyle());
 
-  // Styling state
-  const resumeStyle = ref<ResumeStyle>({
-    themeColor: '#4c49cc',
-    fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
-    fontSize: 14,
-    h1Size: 28,
-    h2Size: 20,
-    h3Size: 16,
-    dateSize: 14,
-    dateWeight: '',
-    lineHeight: 1.6,
-    marginV: 10,
-    marginH: 12,
-    personalInfoMode: "text",
-  });
-
-  // File management states
   const workspacePath = ref<string | null>(null);
   const fileList = ref<FileItem[]>([]);
   const pdfFileList = ref<FileItem[]>([]);
@@ -73,39 +94,134 @@ export const useResumeStore = defineStore("resume", () => {
   const currentPhotoPath = ref<string | null>(null);
   const photoBase64 = ref<string | null>(null);
 
-  /** Load templates dynamically from Tauri backend */
+  const clearPhotoState = () => {
+    currentPhotoPath.value = null;
+    photoBase64.value = null;
+    removeStorageItem(STORAGE_KEYS.lastPhotoPath);
+  };
+
+  const clearWorkspaceState = () => {
+    workspacePath.value = null;
+    fileList.value = [];
+    pdfFileList.value = [];
+    photoFileList.value = [];
+    activeFilePath.value = null;
+    markdownContent.value = DEFAULT_MARKDOWN;
+    clearPhotoState();
+    removeStorageItem(STORAGE_KEYS.workspacePath);
+    removeStorageItem(STORAGE_KEYS.lastOpenedPath);
+  };
+
+  const invalidateWorkspace = () => {
+    clearWorkspaceState();
+    shouldShowWorkspaceDialog.value = true;
+  };
+
+  const setWorkspacePath = (path: string | null) => {
+    workspacePath.value = path;
+
+    if (path) {
+      localStorage.setItem(STORAGE_KEYS.workspacePath, path);
+      shouldShowWorkspaceDialog.value = false;
+      return;
+    }
+
+    removeStorageItem(STORAGE_KEYS.workspacePath);
+  };
+
+  const setLastOpenedPath = (path: string | null) => {
+    if (path) {
+      localStorage.setItem(STORAGE_KEYS.lastOpenedPath, path);
+      return;
+    }
+
+    removeStorageItem(STORAGE_KEYS.lastOpenedPath);
+  };
+
+  const setCurrentPhoto = (path: string | null, dataUrl: string | null) => {
+    currentPhotoPath.value = path;
+    photoBase64.value = dataUrl;
+
+    if (path) {
+      localStorage.setItem(STORAGE_KEYS.lastPhotoPath, path);
+      return;
+    }
+
+    removeStorageItem(STORAGE_KEYS.lastPhotoPath);
+  };
+
+  const openDefaultFile = async (files: FileItem[]) => {
+    if (files.length > 0) {
+      await openFile(files[0].path);
+      return;
+    }
+
+    await createFile(DEFAULT_FILE_NAME);
+  };
+
+  const refreshWorkspaceLists = async (dirPath: string) => {
+    const files = await refreshFileList(dirPath);
+    await refreshPdfList(dirPath);
+    await refreshPhotoList(dirPath);
+    return files;
+  };
+
+  const resolveNextPhotoPath = (entries: PhotoItem[]) => {
+    const preferredPaths = [
+      currentPhotoPath.value,
+      localStorage.getItem(STORAGE_KEYS.lastPhotoPath),
+    ].filter((path): path is string => Boolean(path));
+
+    return (
+      preferredPaths.find((path) => entries.some((entry) => entry.path === path)) ??
+      entries.find((entry) => entry.isIdPhoto)?.path ??
+      null
+    );
+  };
+
+  const loadPhoto = async (path: string | null) => {
+    if (!path) {
+      setCurrentPhoto(null, null);
+      return;
+    }
+
+    try {
+      const dataUrl = await invoke<string>("read_image_as_data_url", { path });
+      setCurrentPhoto(path, dataUrl);
+    } catch (error) {
+      console.error("Failed to load image:", error);
+      setCurrentPhoto(null, null);
+      throw error;
+    }
+  };
+
   const loadTemplates = async () => {
     try {
       const templates = await invoke<ResumeTemplate[]>("list_templates");
       availableTemplates.value = templates;
-      if (templates.length > 0 && !templates.find((t) => t.id === activeTemplate.value)) {
+
+      if (
+        templates.length > 0 &&
+        !templates.some((template) => template.id === activeTemplate.value)
+      ) {
         activeTemplate.value = templates[0].id;
       }
+
       templatesLoaded.value = true;
-    } catch (err) {
-      console.error("Failed to load templates:", err);
+    } catch (error) {
+      console.error("Failed to load templates:", error);
     }
   };
 
-  /** Check workspace and list markdown files */
   const refreshFileList = async (dirPath: string) => {
     try {
       const entries = await invoke<FileItem[]>("list_resumes", { dirPath });
       fileList.value = entries;
       return entries;
-    } catch (err) {
-      console.error("Failed to read directory:", err);
-      // If reading fails, workspace might be invalid
-      workspacePath.value = null;
-      fileList.value = [];
-      pdfFileList.value = [];
-      photoFileList.value = [];
-      currentPhotoPath.value = null;
-      photoBase64.value = null;
-      localStorage.removeItem(LAST_PHOTO_PATH_KEY);
-      localStorage.removeItem('resume-workspace-path');
-      shouldShowWorkspaceDialog.value = true;
-      throw err;
+    } catch (error) {
+      console.error("Failed to read directory:", error);
+      invalidateWorkspace();
+      throw error;
     }
   };
 
@@ -114,32 +230,10 @@ export const useResumeStore = defineStore("resume", () => {
       const entries = await invoke<FileItem[]>("list_pdfs", { dirPath });
       pdfFileList.value = entries;
       return entries;
-    } catch (err) {
-      console.error("Failed to read pdf directory:", err);
+    } catch (error) {
+      console.error("Failed to read pdf directory:", error);
       pdfFileList.value = [];
-      throw err;
-    }
-  };
-
-  const loadPhoto = async (path: string | null) => {
-    if (!path) {
-      currentPhotoPath.value = null;
-      photoBase64.value = null;
-      localStorage.removeItem(LAST_PHOTO_PATH_KEY);
-      return;
-    }
-
-    try {
-      const dataUrl = await invoke<string>("read_image_as_data_url", { path });
-      currentPhotoPath.value = path;
-      photoBase64.value = dataUrl;
-      localStorage.setItem(LAST_PHOTO_PATH_KEY, path);
-    } catch (err) {
-      console.error("Failed to load image:", err);
-      currentPhotoPath.value = null;
-      photoBase64.value = null;
-      localStorage.removeItem(LAST_PHOTO_PATH_KEY);
-      throw err;
+      throw error;
     }
   };
 
@@ -148,14 +242,7 @@ export const useResumeStore = defineStore("resume", () => {
       const entries = await invoke<PhotoItem[]>("list_images", { dirPath });
       photoFileList.value = entries;
 
-      const storedPhotoPath = localStorage.getItem(LAST_PHOTO_PATH_KEY);
-      const nextPhotoPath =
-        [currentPhotoPath.value, storedPhotoPath]
-          .filter((path): path is string => Boolean(path))
-          .find((path) => entries.some((entry) => entry.path === path))
-        ?? entries.find((entry) => entry.isIdPhoto)?.path
-        ?? null;
-
+      const nextPhotoPath = resolveNextPhotoPath(entries);
       if (!nextPhotoPath) {
         await loadPhoto(null);
       } else if (nextPhotoPath !== currentPhotoPath.value || !photoBase64.value) {
@@ -163,11 +250,11 @@ export const useResumeStore = defineStore("resume", () => {
       }
 
       return entries;
-    } catch (err) {
-      console.error("Failed to read image directory:", err);
+    } catch (error) {
+      console.error("Failed to read image directory:", error);
       photoFileList.value = [];
       await loadPhoto(null);
-      throw err;
+      throw error;
     }
   };
 
@@ -178,8 +265,8 @@ export const useResumeStore = defineStore("resume", () => {
 
     try {
       await loadPhoto(path);
-    } catch (err) {
-      ElMessage.error("证件照加载失败");
+    } catch {
+      ElMessage.error("加载证件照失败");
     }
   };
 
@@ -195,7 +282,7 @@ export const useResumeStore = defineStore("resume", () => {
         filters: [
           {
             name: "图片文件",
-            extensions: ["png", "jpg", "jpeg", "webp", "bmp", "gif"],
+            extensions: IMAGE_EXTENSIONS,
           },
         ],
       });
@@ -209,245 +296,248 @@ export const useResumeStore = defineStore("resume", () => {
         workspacePath: workspacePath.value,
       });
 
-      currentPhotoPath.value = imported.path;
-      localStorage.setItem(LAST_PHOTO_PATH_KEY, imported.path);
+      setCurrentPhoto(imported.path, photoBase64.value);
       await refreshPhotoList(workspacePath.value);
-      ElMessage.success(`证件照已保存为 ${imported.name}`);
-    } catch (err) {
-      console.error("Failed to import id photo:", err);
-      ElMessage.error(`证件照上传失败: ${err}`);
+      ElMessage.success(`已导入证件照：${imported.name}`);
+    } catch (error) {
+      console.error("Failed to import id photo:", error);
+      ElMessage.error(`导入证件照失败：${String(error)}`);
     }
   };
 
   const deletePhoto = async (path: string) => {
     try {
       await invoke("delete_resume", { path });
+
       if (workspacePath.value) {
         await refreshPhotoList(workspacePath.value);
       } else if (currentPhotoPath.value === path) {
         await loadPhoto(null);
       }
+
       ElMessage.success("证件照已删除");
-    } catch (err) {
-      console.error("Failed to delete photo:", err);
+    } catch (error) {
+      console.error("Failed to delete photo:", error);
       ElMessage.error("删除证件照失败");
     }
   };
 
-  /** Select a workspace directory */
   const selectWorkspace = async () => {
     try {
-      const dir = await openDialog({ directory: true, multiple: false });
-      if (dir && typeof dir === 'string') {
-        workspacePath.value = dir;
-        localStorage.setItem('resume-workspace-path', dir);
-        shouldShowWorkspaceDialog.value = false;
-        const files = await refreshFileList(dir);
-        await refreshPdfList(dir);
-        await refreshPhotoList(dir);
-        
-        if (files.length > 0) {
-          await openFile(files[0].path);
-        } else {
-          await createFile("未命名.md");
-        }
+      const selectedDir = await openDialog({ directory: true, multiple: false });
+      if (!selectedDir || typeof selectedDir !== "string") {
+        return;
       }
-    } catch (err) {
-      console.error("Failed to open dialog:", err);
+
+      setWorkspacePath(selectedDir);
+      const files = await refreshWorkspaceLists(selectedDir);
+      await openDefaultFile(files);
+    } catch (error) {
+      console.error("Failed to open dialog:", error);
     }
   };
 
-  /** Open a specific file */
   const openFile = async (path: string) => {
     try {
       const content = await invoke<string>("read_resume", { path });
       markdownContent.value = content;
       activeFilePath.value = path;
-      localStorage.setItem('resume-last-opened-path', path);
-    } catch (err) {
-      console.error("Failed to read file:", err);
-      ElMessage.error("文件读取失败");
-      // If specific file fails, fallback to first available
+      setLastOpenedPath(path);
+    } catch (error) {
+      console.error("Failed to read file:", error);
+      ElMessage.error("读取文件失败");
+
       if (fileList.value.length > 0) {
         await openFile(fileList.value[0].path);
       }
     }
   };
 
-  /** Save current file content if there is an active file.
-   * @param silent - if true, suppress the success toast (used by auto-save) */
   const saveCurrentFile = async (silent = false) => {
-    if (activeFilePath.value) {
-      try {
-        await invoke("write_resume", { path: activeFilePath.value, content: markdownContent.value });
-        if (!silent) ElMessage.success("已保存");
-      } catch (err) {
-        console.error("Failed to save file:", err);
-        ElMessage.error("保存失败");
+    if (!activeFilePath.value) {
+      return;
+    }
+
+    try {
+      await invoke("write_resume", {
+        path: activeFilePath.value,
+        content: markdownContent.value,
+      });
+
+      if (!silent) {
+        ElMessage.success("文件已保存");
       }
+    } catch (error) {
+      console.error("Failed to save file:", error);
+      ElMessage.error("保存文件失败");
     }
   };
 
-  /** Create a new markdown file */
   const createFile = async (name: string) => {
-    if (!workspacePath.value) return;
+    if (!workspacePath.value) {
+      return;
+    }
+
     try {
-      let fileName = name;
-      if (!fileName.endsWith('.md')) {
-        fileName += '.md';
-      }
-      const newPath = await join(workspacePath.value, fileName);
+      const newPath = await join(workspacePath.value, ensureMarkdownFileName(name));
       await invoke("write_resume", { path: newPath, content: DEFAULT_MARKDOWN });
       await refreshFileList(workspacePath.value);
       await refreshPdfList(workspacePath.value);
       await openFile(newPath);
-      ElMessage.success("新建成功");
-    } catch (err) {
-      console.error("Failed to create file:", err);
-      ElMessage.error("新建文件失败");
+      ElMessage.success("已创建新文件");
+    } catch (error) {
+      console.error("Failed to create file:", error);
+      ElMessage.error("创建文件失败");
     }
   };
 
-  /** Delete a file */
   const deleteFile = async (path: string) => {
     try {
       await invoke("delete_resume", { path });
-      if (workspacePath.value) {
-        const files = await refreshFileList(workspacePath.value);
-        await refreshPdfList(workspacePath.value);
-        if (activeFilePath.value === path) {
-          if (files.length > 0) {
-            await openFile(files[0].path);
-          } else {
-            await createFile("未命名.md");
-          }
-        }
+
+      if (!workspacePath.value) {
+        ElMessage.success("文件已删除");
+        return;
       }
-      ElMessage.success("已移动到回收站");
-    } catch (err) {
-      console.error("Failed to delete file:", err);
-      ElMessage.error("删除失败");
+
+      const files = await refreshFileList(workspacePath.value);
+      await refreshPdfList(workspacePath.value);
+
+      if (activeFilePath.value === path) {
+        await openDefaultFile(files);
+      }
+
+      ElMessage.success("文件已删除");
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+      ElMessage.error("删除文件失败");
     }
   };
 
-  /** Delete a PDF file */
   const deletePdf = async (path: string) => {
     try {
       await invoke("delete_resume", { path });
+
       if (workspacePath.value) {
         await refreshPdfList(workspacePath.value);
       }
-      ElMessage.success("PDF 已移动到回收站");
-    } catch (err) {
-      console.error("Failed to delete pdf:", err);
-      ElMessage.error("PDF 删除失败");
+
+      ElMessage.success("PDF 已删除");
+    } catch (error) {
+      console.error("Failed to delete pdf:", error);
+      ElMessage.error("删除 PDF 失败");
     }
   };
 
-  /** Rename a file */
   const renameFile = async (oldPath: string, newName: string) => {
-    if (!workspacePath.value) return;
+    if (!workspacePath.value) {
+      return;
+    }
+
     try {
-      let finalName = newName.trim();
-      if (!finalName) return;
-      if (!finalName.endsWith('.md')) {
-        finalName += '.md';
+      const newPath = await join(workspacePath.value, ensureMarkdownFileName(newName));
+      if (oldPath === newPath) {
+        return;
       }
-      const newPath = await join(workspacePath.value, finalName);
-      if (oldPath === newPath) return; // Same name
+
       await invoke("rename_resume", { oldPath, newPath });
       await refreshFileList(workspacePath.value);
       await refreshPdfList(workspacePath.value);
+
       if (activeFilePath.value === oldPath) {
         await openFile(newPath);
       }
-      ElMessage.success("重命名成功");
-    } catch (err) {
-      console.error("Failed to rename file:", err);
+
+      ElMessage.success("文件名已更新");
+    } catch (error) {
+      console.error("Failed to rename file:", error);
       ElMessage.error("重命名失败");
     }
   };
 
-  /** Duplicate a file */
   const duplicateFile = async (path: string) => {
-    if (!workspacePath.value) return;
-    try {
-      const originalFile = fileList.value.find(f => f.path === path);
-      if (!originalFile) return;
+    if (!workspacePath.value) {
+      return;
+    }
 
-      const baseName = originalFile.name.replace(/\.md$/, '');
-      let newName = `${baseName}-副本.md`;
-      let newPath = await join(workspacePath.value, newName);
-      
-      let counter = 1;
-      while (fileList.value.some(f => f.path === newPath)) {
-        counter++;
-        newName = `${baseName}-副本(${counter}).md`;
-        newPath = await join(workspacePath.value, newName);
+    try {
+      const originalFile = fileList.value.find((file) => file.path === path);
+      if (!originalFile) {
+        return;
       }
 
-      await invoke("duplicate_resume", { path, newPath });
+      const baseName = originalFile.name.replace(/\.md$/, "");
+      let counter = 1;
+      let nextName = `${baseName}-副本.md`;
+      let nextPath = await join(workspacePath.value, nextName);
+
+      while (fileList.value.some((file) => file.path === nextPath)) {
+        counter += 1;
+        nextName = `${baseName}-副本(${counter}).md`;
+        nextPath = await join(workspacePath.value, nextName);
+      }
+
+      await invoke("duplicate_resume", { path, newPath: nextPath });
       await refreshFileList(workspacePath.value);
       await refreshPdfList(workspacePath.value);
-      ElMessage.success("创建副本成功");
-    } catch (err) {
-      console.error("Failed to duplicate file:", err);
+      ElMessage.success("已创建副本");
+    } catch (error) {
+      console.error("Failed to duplicate file:", error);
       ElMessage.error("创建副本失败");
     }
   };
 
-  /** Overwrite the active template CSS with the current resumeStyle */
   const saveCurrentTemplate = async () => {
-    const tpl = availableTemplates.value.find(t => t.id === activeTemplate.value);
-    if (!tpl) {
-      ElMessage.error("未找到当前模板");
+    const template = availableTemplates.value.find(
+      (item) => item.id === activeTemplate.value,
+    );
+
+    if (!template) {
+      ElMessage.error("当前模板不存在");
       return;
     }
+
     const style = resumeStyle.value;
-    const marker = '/* @user-overrides */';
-    const baseCSS = tpl.css.split(marker)[0].trimEnd();
-    const patchCSS = `\n\n${marker}\n.resume-document {\n  font-family: ${style.fontFamily};\n  font-size: ${style.fontSize}px;\n  line-height: ${style.lineHeight};\n  --cv-contact-render: ${style.personalInfoMode || "text"};\n}\n.resume-document h1 { font-size: ${style.h1Size}px; }\n.resume-document h2 { font-size: ${style.h2Size}px; }\n.resume-document h3 { font-size: ${style.h3Size}px; }\n@page { margin: ${style.marginV}mm ${style.marginH}mm; }\n.resume-document h2 { border-left-color: ${style.themeColor}; background-color: color-mix(in srgb, ${style.themeColor} 10%, transparent); }\n`;
-    const newCSS = baseCSS + patchCSS;
+    const marker = "/* @user-overrides */";
+    const baseCss = template.css.split(marker)[0].trimEnd();
+    const patchCss = `\n\n${marker}\n.resume-document {\n  font-family: ${style.fontFamily};\n  font-size: ${style.fontSize}px;\n  line-height: ${style.lineHeight};\n  --cv-contact-render: ${style.personalInfoMode || "text"};\n}\n.resume-document h1 { font-size: ${style.h1Size}px; }\n.resume-document h2 { font-size: ${style.h2Size}px; }\n.resume-document h3 { font-size: ${style.h3Size}px; }\n@page { margin: ${style.marginV}mm ${style.marginH}mm; }\n.resume-document h2 { border-left-color: ${style.themeColor}; background-color: color-mix(in srgb, ${style.themeColor} 10%, transparent); }\n`;
+    const newCss = baseCss + patchCss;
+
     try {
-      await invoke("save_template", { id: tpl.id, css: newCSS });
-      tpl.css = newCSS;
+      await invoke("save_template", { id: template.id, css: newCss });
+      template.css = newCss;
       ElMessage.success("模板已保存");
-    } catch (err) {
-      console.error("Failed to save template:", err);
-      ElMessage.error("模板保存失败");
+    } catch (error) {
+      console.error("Failed to save template:", error);
+      ElMessage.error("保存模板失败");
     }
   };
 
-  // Initialize workspace path and handle auto-open logic
   const initWorkspace = async () => {
-    const savedWorkspace = localStorage.getItem('resume-workspace-path');
+    const savedWorkspace = localStorage.getItem(STORAGE_KEYS.workspacePath);
     if (!savedWorkspace) {
       shouldShowWorkspaceDialog.value = true;
       return;
     }
 
-    workspacePath.value = savedWorkspace;
+    setWorkspacePath(savedWorkspace);
+
     try {
-      const files = await refreshFileList(savedWorkspace);
-      await refreshPdfList(savedWorkspace);
-      await refreshPhotoList(savedWorkspace);
-      const lastPath = localStorage.getItem('resume-last-opened-path');
-      
-      if (lastPath && files.some(f => f.path === lastPath)) {
-        await openFile(lastPath);
-      } else if (files.length > 0) {
-        await openFile(files[0].path);
-      } else {
-        await createFile("未命名.md");
+      const files = await refreshWorkspaceLists(savedWorkspace);
+      const lastOpenedPath = localStorage.getItem(STORAGE_KEYS.lastOpenedPath);
+
+      if (lastOpenedPath && files.some((file) => file.path === lastOpenedPath)) {
+        await openFile(lastOpenedPath);
+        return;
       }
-    } catch (err) {
-      // workspace path invalid or inaccessible
+
+      await openDefaultFile(files);
+    } catch {
       shouldShowWorkspaceDialog.value = true;
     }
   };
-  
-  // Call init when store is instantiated
-  initWorkspace();
+
+  void initWorkspace();
 
   return {
     markdownContent,
@@ -480,6 +570,6 @@ export const useResumeStore = defineStore("resume", () => {
     selectPhoto,
     importIdPhoto,
     deletePhoto,
-    photoBase64
+    photoBase64,
   };
 });

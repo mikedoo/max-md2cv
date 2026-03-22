@@ -6,17 +6,18 @@ import { useResumeStore } from '../stores/resume'
 import type { FileItem } from '../stores/resume'
 
 const store = useResumeStore()
+
 const newFileName = ref('')
 const isCreating = ref(false)
-
-const editingFileStr = ref<string | null>(null)
+const editingFilePath = ref<string | null>(null)
 const editingFileName = ref('')
 const editInputRefs = ref<Record<string, HTMLInputElement | null>>({})
-const activeTab = ref('resume')
+const activeTab = ref<'resume' | 'pdf' | 'photo'>('resume')
 
 const deleteDialogVisible = ref(false)
 const fileToDelete = ref<FileItem | null>(null)
 
+const workspaceDisplayText = computed(() => store.workspacePath || '请选择工作文件夹')
 const currentPhotoName = computed(() => {
   const current = store.photoFileList.find((file) => file.path === store.currentPhotoPath)
   return current?.name ?? ''
@@ -43,46 +44,49 @@ const handlePhotoImport = async () => {
   await store.importIdPhoto()
 }
 
-const handlePhotoClick = async (path: string) => {
-  await store.selectPhoto(path)
-}
-
-const handlePhotoDelete = async (path: string) => {
-  await store.deletePhoto(path)
-}
-
-const handleCreateFile = async () => {
-  if (!newFileName.value.trim()) {
+const handlePhotoDelete = async () => {
+  if (!store.currentPhotoPath) {
     return
   }
 
-  await store.createFile(newFileName.value.trim())
-  newFileName.value = ''
+  await store.deletePhoto(store.currentPhotoPath)
+}
+
+const openCreateFile = () => {
+  isCreating.value = true
+}
+
+const closeCreateFile = () => {
   isCreating.value = false
+  newFileName.value = ''
+}
+
+const handleCreateFile = async () => {
+  const fileName = newFileName.value.trim()
+  if (!fileName) {
+    return
+  }
+
+  await store.createFile(fileName)
+  closeCreateFile()
 }
 
 const startRename = async (file: FileItem) => {
-  editingFileStr.value = file.path
+  editingFilePath.value = file.path
   editingFileName.value = file.name.replace(/\.md$/, '')
   await nextTick()
-
-  const inputEl = editInputRefs.value[file.path]
-  if (inputEl) {
-    if (Array.isArray(inputEl)) {
-      inputEl[0]?.focus()
-    } else {
-      inputEl.focus()
-    }
-  }
+  editInputRefs.value[file.path]?.focus()
 }
 
 const finishRename = async () => {
-  if (!editingFileStr.value) return
+  if (!editingFilePath.value) {
+    return
+  }
 
-  const oldPath = editingFileStr.value
+  const oldPath = editingFilePath.value
   const newName = editingFileName.value.trim()
 
-  editingFileStr.value = null
+  editingFilePath.value = null
   editingFileName.value = ''
 
   if (newName) {
@@ -91,30 +95,32 @@ const finishRename = async () => {
 }
 
 const cancelRename = () => {
-  editingFileStr.value = null
+  editingFilePath.value = null
   editingFileName.value = ''
+}
+
+const openDeleteDialog = (file: FileItem) => {
+  fileToDelete.value = file
+  deleteDialogVisible.value = true
 }
 
 const handleContextMenu = (command: { action: string; file: FileItem }) => {
   if (command.action === 'duplicate') {
-    store.duplicateFile(command.file.path)
+    void store.duplicateFile(command.file.path)
     return
   }
 
   if (command.action === 'rename') {
-    startRename(command.file)
+    void startRename(command.file)
     return
   }
 
-  fileToDelete.value = command.file
-  nextTick(() => {
-    deleteDialogVisible.value = true
-  })
+  openDeleteDialog(command.file)
 }
 
-const confirmDelete = () => {
+const confirmDelete = async () => {
   if (fileToDelete.value) {
-    store.deleteFile(fileToDelete.value.path)
+    await store.deleteFile(fileToDelete.value.path)
   }
 
   deleteDialogVisible.value = false
@@ -130,14 +136,14 @@ const confirmDelete = () => {
   >
     <el-dialog
       v-model="deleteDialogVisible"
-      title="提示"
+      title="删除文件"
       width="260"
       :show-close="false"
       :append-to-body="false"
       class="delete-confirm-dialog"
     >
       <span class="text-sm text-on-surface">
-        确定要删除 "{{ fileToDelete?.name.replace(/\.md$/, '') }}" 吗？
+        确认删除 “{{ fileToDelete?.name.replace(/\.md$/, '') }}” 吗？
       </span>
       <template #footer>
         <div class="flex gap-2 justify-end">
@@ -158,60 +164,6 @@ const confirmDelete = () => {
         </button>
       </div>
 
-      <div v-if="false" class="px-6 pt-4 pb-3 flex flex-col gap-3 shrink-0">
-        <div class="flex items-center gap-2 w-full">
-          <button
-            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-surface-container hover:bg-surface-container-highest transition-all duration-200 cursor-pointer text-sm font-medium text-on-surface shadow-sm"
-            @click="handleSelectWorkspace"
-          >
-            <span class="material-symbols-outlined text-lg shrink-0">folder_open</span>
-            <span class="truncate">更换文件夹</span>
-          </button>
-
-          <button
-            v-if="store.workspacePath && !isCreating"
-            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl transition-all duration-200 cursor-pointer text-sm font-medium shadow-sm"
-            :style="{
-              backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
-              color: store.resumeStyle.themeColor,
-            }"
-            @click="isCreating = true"
-          >
-            <span class="material-symbols-outlined text-lg shrink-0">add</span>
-            <span class="truncate">新建</span>
-          </button>
-        </div>
-
-        <div
-          class="px-1 text-xs leading-5 text-on-surface-variant break-all min-h-[1.5rem]"
-          :title="store.workspacePath || undefined"
-        >
-          {{ store.workspacePath || '尚未选择工作文件夹' }}
-        </div>
-
-        <transition name="fade">
-          <div
-            v-if="isCreating"
-            class="flex items-center gap-2 w-full bg-surface-container px-3 py-2 rounded-xl border border-primary/20 shadow-sm"
-          >
-            <input
-              v-model="newFileName"
-              @keyup.enter="handleCreateFile"
-              @keyup.esc="isCreating = false"
-              placeholder="文件名..."
-              class="flex-1 bg-transparent border-none focus:outline-none text-sm text-on-surface min-w-0"
-              autofocus
-            />
-            <button
-              @click="isCreating = false"
-              class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-variant transition-colors cursor-pointer shrink-0"
-            >
-              <span class="material-symbols-outlined text-on-surface-variant text-sm">close</span>
-            </button>
-          </div>
-        </transition>
-      </div>
-
       <el-tabs v-model="activeTab" class="tabs-container min-h-0 flex-1">
         <el-tab-pane label="简历" name="resume">
           <div class="h-full px-4 pb-6 pt-3">
@@ -222,7 +174,7 @@ const confirmDelete = () => {
               <div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">inbox</span>
               </div>
-              <p class="text-sm font-medium">尚未选择工作空间</p>
+              <p class="text-sm font-medium">请选择工作文件夹</p>
             </div>
 
             <div
@@ -232,7 +184,7 @@ const confirmDelete = () => {
               <div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">description</span>
               </div>
-              <p class="text-sm font-medium">该目录下暂无 .md 文件</p>
+              <p class="text-sm font-medium">当前目录还没有 Markdown 简历</p>
             </div>
 
             <ul v-else class="h-full flex flex-col gap-1 overflow-y-auto custom-scrollbar pr-1">
@@ -258,8 +210,8 @@ const confirmDelete = () => {
                   >
                     <div class="flex-1 min-w-0 overflow-hidden mr-2">
                       <input
-                        v-if="editingFileStr === file.path"
-                        :ref="(el) => { if (el) editInputRefs[file.path] = el as HTMLInputElement }"
+                        v-if="editingFilePath === file.path"
+                        :ref="(el) => { editInputRefs[file.path] = el as HTMLInputElement | null }"
                         v-model="editingFileName"
                         @keyup.enter="finishRename"
                         @keyup.esc="cancelRename"
@@ -273,7 +225,7 @@ const confirmDelete = () => {
                     </div>
 
                     <el-popconfirm
-                      :title="`确定删除 ${file.name.replace(/\.md$/, '')} 吗？`"
+                      :title="`确认删除 ${file.name.replace(/\.md$/, '')} 吗？`"
                       confirm-button-text="删除"
                       cancel-button-text="取消"
                       confirm-button-type="danger"
@@ -295,7 +247,7 @@ const confirmDelete = () => {
                       <el-dropdown-item :command="{ action: 'duplicate', file }">
                         <span class="flex items-center gap-2">
                           <span class="material-symbols-outlined text-[18px]">content_copy</span>
-                          创建副本
+                          复制
                         </span>
                       </el-dropdown-item>
                       <el-dropdown-item :command="{ action: 'rename', file }">
@@ -327,7 +279,7 @@ const confirmDelete = () => {
               <div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">picture_as_pdf</span>
               </div>
-              <p class="text-sm font-medium">选择工作文件夹后显示 PDF 文件</p>
+              <p class="text-sm font-medium">请选择工作文件夹以查看 PDF</p>
             </div>
 
             <div
@@ -337,7 +289,7 @@ const confirmDelete = () => {
               <div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">picture_as_pdf</span>
               </div>
-              <p class="text-sm font-medium">当前文件夹暂无 PDF 文件</p>
+              <p class="text-sm font-medium">当前目录还没有 PDF 文件</p>
             </div>
 
             <ul v-else class="h-full flex flex-col gap-1 overflow-y-auto custom-scrollbar pr-1">
@@ -363,7 +315,7 @@ const confirmDelete = () => {
                   </button>
 
                   <el-popconfirm
-                    :title="`确定删除 ${file.name} 吗？`"
+                    :title="`确认删除 ${file.name} 吗？`"
                     confirm-button-text="删除"
                     cancel-button-text="取消"
                     confirm-button-type="danger"
@@ -386,17 +338,14 @@ const confirmDelete = () => {
 
         <el-tab-pane label="证件照" name="photo">
           <div class="h-full px-4 pb-6 pt-3">
-            <div v-if="false" class="max-w-[220px] space-y-3 opacity-80">
-              <div class="w-16 h-16 mx-auto rounded-full bg-surface-container flex items-center justify-center">
-                <span class="material-symbols-outlined text-3xl">add_a_photo</span>
-              </div>
-              <p class="text-sm font-medium">证件照功能开发中...</p>
-            </div>
-            <div v-if="!store.workspacePath" class="h-full flex flex-col items-center justify-center text-center text-on-surface-variant gap-4 opacity-70">
+            <div
+              v-if="!store.workspacePath"
+              class="h-full flex flex-col items-center justify-center text-center text-on-surface-variant gap-4 opacity-70"
+            >
               <div class="w-16 h-16 rounded-full bg-surface-container flex items-center justify-center">
                 <span class="material-symbols-outlined text-3xl">add_a_photo</span>
               </div>
-              <p class="text-sm font-medium">选择工作文件夹后显示证件照</p>
+              <p class="text-sm font-medium">请选择工作文件夹以上传证件照</p>
             </div>
 
             <div v-else class="h-full flex flex-col gap-4">
@@ -413,25 +362,6 @@ const confirmDelete = () => {
               </button>
 
               <div class="rounded-[24px] bg-surface-container p-4 shadow-sm">
-                <div v-if="false" class="flex items-center justify-between gap-3 mb-3">
-                  <div class="min-w-0">
-                    <p class="text-sm font-semibold text-on-surface">当前证件照</p>
-                    <p class="text-xs text-on-surface-variant truncate">
-                      {{ currentPhotoName || '当前目录暂无已选证件照' }}
-                    </p>
-                  </div>
-                  <span
-                    v-if="store.currentPhotoPath"
-                    class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
-                    :style="{
-                      backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 12%, white)`,
-                      color: store.resumeStyle.themeColor,
-                    }"
-                  >
-                    自动套用
-                  </span>
-                </div>
-
                 <div class="aspect-[3/4] rounded-[20px] bg-surface-container-lowest overflow-hidden flex items-center justify-center">
                   <img
                     v-if="store.photoBase64"
@@ -441,7 +371,7 @@ const confirmDelete = () => {
                   />
                   <div v-else class="px-5 text-center text-on-surface-variant">
                     <span class="material-symbols-outlined text-3xl mb-2 block">gallery_thumbnail</span>
-                    <p class="text-sm font-medium">当前文件夹还没有可用证件照</p>
+                    <p class="text-sm font-medium">当前目录还没有证件照</p>
                   </div>
                 </div>
 
@@ -458,7 +388,7 @@ const confirmDelete = () => {
                     confirm-button-text="删除"
                     cancel-button-text="取消"
                     confirm-button-type="danger"
-                    @confirm="handlePhotoDelete(store.currentPhotoPath)"
+                    @confirm="handlePhotoDelete"
                   >
                     <template #reference>
                       <button
@@ -472,65 +402,8 @@ const confirmDelete = () => {
                 </div>
 
                 <p v-else class="mt-3 text-xs leading-5 text-on-surface-variant">
-                  上传后会保存到当前工作文件夹，并规范命名为 `IDphoto`、`IDphoto-2` 等。目录中已有该命名的图片时，会自动应用到所有简历。
+                  上传后会保存在当前工作文件夹，并按 `IDphoto`、`IDphoto-2` 这类名称自动管理。
                 </p>
-              </div>
-
-              <div v-if="false" class="min-h-0 flex-1 rounded-[24px] bg-surface-container/80 p-3 shadow-sm">
-                <div class="flex items-center justify-between px-1 pb-2">
-                  <p class="text-sm font-semibold text-on-surface">目录中的图片</p>
-                  <span class="text-xs text-on-surface-variant">{{ store.photoFileList.length }} 张</span>
-                </div>
-
-                <div
-                  v-if="store.photoFileList.length === 0"
-                  class="h-[160px] flex flex-col items-center justify-center text-center text-on-surface-variant gap-3 opacity-70"
-                >
-                  <span class="material-symbols-outlined text-3xl">imagesmode</span>
-                  <p class="text-sm font-medium">当前文件夹暂无图片文件</p>
-                </div>
-
-                <ul v-else class="h-full flex flex-col gap-2 overflow-y-auto custom-scrollbar pr-1">
-                  <li
-                    v-for="file in store.photoFileList"
-                    :key="file.path"
-                  >
-                    <button
-                      class="w-full flex items-center justify-between gap-3 rounded-2xl px-3 py-3 text-left transition-all duration-200"
-                      :class="store.currentPhotoPath === file.path ? 'shadow-sm' : 'hover:bg-surface-container-highest/70'"
-                      :style="
-                        store.currentPhotoPath === file.path
-                          ? {
-                              backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 12%, white)`,
-                              color: store.resumeStyle.themeColor,
-                            }
-                          : undefined
-                      "
-                      @click="handlePhotoClick(file.path)"
-                    >
-                      <div class="min-w-0 flex-1">
-                        <p class="text-sm font-medium truncate">{{ file.name }}</p>
-                        <p class="text-xs truncate" :class="store.currentPhotoPath === file.path ? 'text-current/70' : 'text-on-surface-variant'">
-                          {{ file.path }}
-                        </p>
-                      </div>
-                      <span
-                        class="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
-                        :class="file.isIdPhoto ? '' : 'bg-surface-container-highest text-on-surface-variant'"
-                        :style="
-                          file.isIdPhoto
-                            ? {
-                                backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
-                                color: store.resumeStyle.themeColor,
-                              }
-                            : undefined
-                        "
-                      >
-                        {{ file.isIdPhoto ? 'IDphoto' : '其他图片' }}
-                      </span>
-                    </button>
-                  </li>
-                </ul>
               </div>
             </div>
           </div>
@@ -538,12 +411,11 @@ const confirmDelete = () => {
       </el-tabs>
 
       <div class="px-6 pt-3 pb-5 flex flex-col gap-3 shrink-0 border-t border-black/5 bg-surface-container-lowest">
-        <!--
         <div
           class="px-1 text-xs leading-5 text-on-surface-variant break-all min-h-[1.5rem]"
           :title="store.workspacePath || undefined"
         >
-          {{ store.workspacePath || 'çæ°­æ¹­é–«å¤‹å«¨å®¸ãƒ¤ç¶”é‚å›¦æ¬¢æ¾¶? }}
+          {{ workspaceDisplayText }}
         </div>
 
         <transition name="fade">
@@ -554,66 +426,13 @@ const confirmDelete = () => {
             <input
               v-model="newFileName"
               @keyup.enter="handleCreateFile"
-              @keyup.esc="isCreating = false"
-              placeholder="é‚å›¦æ¬¢éš?.."
-              class="flex-1 bg-transparent border-none focus:outline-none text-sm text-on-surface min-w-0"
-              autofocus
-            />
-            <button
-              @click="isCreating = false"
-              class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-variant transition-colors cursor-pointer shrink-0"
-            >
-              <span class="material-symbols-outlined text-on-surface-variant text-sm">close</span>
-            </button>
-          </div>
-        </transition>
-
-        <div class="flex items-center gap-2 w-full">
-          <button
-            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-surface-container hover:bg-surface-container-highest transition-all duration-200 cursor-pointer text-sm font-medium text-on-surface shadow-sm"
-            @click="handleSelectWorkspace"
-          >
-            <span class="material-symbols-outlined text-lg shrink-0">folder_open</span>
-            <span class="truncate">é‡å­˜å´²é‚å›¦æ¬¢æ¾¶?/span>
-          </button>
-
-          <button
-            v-if="store.workspacePath && !isCreating"
-            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl transition-all duration-200 cursor-pointer text-sm font-medium shadow-sm"
-            :style="{
-              backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
-              color: store.resumeStyle.themeColor,
-            }"
-            @click="isCreating = true"
-          >
-            <span class="material-symbols-outlined text-lg shrink-0">add</span>
-            <span class="truncate">é‚æ¿ç¼“</span>
-          </button>
-        </div>
-        -->
-
-        <div
-          class="px-1 text-xs leading-5 text-on-surface-variant break-all min-h-[1.5rem]"
-          :title="store.workspacePath || undefined"
-        >
-          {{ store.workspacePath || '请选择工作文件夹' }}
-        </div>
-
-        <transition name="fade">
-          <div
-            v-if="isCreating"
-            class="flex items-center gap-2 w-full bg-surface-container px-3 py-2 rounded-xl border border-primary/20 shadow-sm"
-          >
-            <input
-              v-model="newFileName"
-              @keyup.enter="handleCreateFile"
-              @keyup.esc="isCreating = false"
+              @keyup.esc="closeCreateFile"
               placeholder="输入文件名..."
               class="flex-1 bg-transparent border-none focus:outline-none text-sm text-on-surface min-w-0"
               autofocus
             />
             <button
-              @click="isCreating = false"
+              @click="closeCreateFile"
               class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-variant transition-colors cursor-pointer shrink-0"
             >
               <span class="material-symbols-outlined text-on-surface-variant text-sm">close</span>
@@ -637,7 +456,7 @@ const confirmDelete = () => {
               backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
               color: store.resumeStyle.themeColor,
             }"
-            @click="isCreating = true"
+            @click="openCreateFile"
           >
             <span class="material-symbols-outlined text-lg shrink-0">add</span>
             <span class="truncate">新建</span>
