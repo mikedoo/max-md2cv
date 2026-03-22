@@ -1,12 +1,11 @@
-# Max-MD2CV 智能简历 (The Digital Curator)
-
+# Max-MD2CV 简历编辑器
 Max-MD2CV 是一款基于现代前端架构和 Rust 桌面环境打造的轻巧、极速且极具设计感的 **Markdown 到 PDF 简历转换器**。
 
 本作致力于为具有品味的求职者或创作者提供无缝的「所见即所得」简历编辑与排版体验。它完全消除了复杂多变的排版调整成本，一切只需关注 Markdown 纯文本。
 
 ## ✨ 核心特性与设计哲学
 
-本项目的设计语言被称为 **The Digital Curator（数字策展人）**，属于 **柔和极简美学 (Soft Minimalist)**：
+本项目的设计语言被称为 ：**柔和极简美学 (Soft Minimalist)**：
 - **"No-Line" Rule (无边框法则)**：彻底摒弃 Web 时代遗留的 1px 机械边框界线，利用 `surface`, `surface-container-low` 等细腻的背景色带层级和悬浮卡片来划分空间。
 - **Ambient Shadows (环境阴影)**：为卡片或互动元素引入带有主色调 (`#4c49cc`) 漫反射的宽大而柔和的阴影，创造更真实的数字物理空间。
 - **Modern Typography (现代版式)**：引入 `Manrope` 几何无衬线字体，字间距略宽，兼具专业性与可读性。

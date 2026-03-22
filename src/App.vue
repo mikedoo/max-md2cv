@@ -62,10 +62,7 @@ const store = useResumeStore()
 <style>
 /* Global styles */
 
-/* 隐藏 el-color-picker 弹出面板底部的 Clear / OK 按钮，保留 Hex 输入框 */
-.el-color-dropdown__btns .el-button {
-  display: none !important;
-}
+
 
 .fade-overlay-enter-active,
 .fade-overlay-leave-active {

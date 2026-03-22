@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useResumeStore } from '../stores/resume'
+import type { FileItem } from '../stores/resume'
 
 const store = useResumeStore()
 const newFileName = ref('')
 const isCreating = ref(false)
+
+const editingFileStr = ref<string | null>(null)
+const editingFileName = ref('')
+const editInputRefs = ref<Record<string, HTMLInputElement | null>>({})
+
+// Delete confirmation dialog
+const deleteDialogVisible = ref(false)
+const fileToDelete = ref<FileItem | null>(null)
 
 const handleSelectWorkspace = async () => {
   await store.selectWorkspace()
@@ -23,6 +32,54 @@ const handleCreateFile = async () => {
   isCreating.value = false
 }
 
+const startRename = async (file: FileItem) => {
+  editingFileStr.value = file.path
+  editingFileName.value = file.name.replace(/\.md$/, '')
+  await nextTick()
+  const inputEl = editInputRefs.value[file.path]
+  if (inputEl) {
+    // Vue 3 puts elements in an array if inside v-for sometimes, handle accordingly
+    if (Array.isArray(inputEl)) (inputEl[0] as HTMLInputElement).focus()
+    else (inputEl as HTMLInputElement).focus()
+  }
+}
+
+const finishRename = async () => {
+  if (!editingFileStr.value) return
+  const oldPath = editingFileStr.value
+  const newName = editingFileName.value.trim()
+  editingFileStr.value = null
+  editingFileName.value = ''
+  
+  if (newName) {
+    await store.renameFile(oldPath, newName)
+  }
+}
+
+const cancelRename = () => {
+  editingFileStr.value = null
+  editingFileName.value = ''
+}
+
+const handleContextMenu = (command: { action: string, file: FileItem }) => {
+  if (command.action === 'duplicate') {
+    store.duplicateFile(command.file.path)
+  } else if (command.action === 'rename') {
+    startRename(command.file)
+  } else if (command.action === 'delete') {
+    fileToDelete.value = command.file
+    nextTick(() => { deleteDialogVisible.value = true })
+  }
+}
+
+const confirmDelete = () => {
+  if (fileToDelete.value) {
+    store.deleteFile(fileToDelete.value.path)
+  }
+  deleteDialogVisible.value = false
+  fileToDelete.value = null
+}
+
 // Handle deletion via el-popconfirm in the template
 
 // Ensure proper spacing and aesthetic UI with tailwind
@@ -33,6 +90,26 @@ const handleCreateFile = async () => {
     class="h-full bg-surface-container-lowest flex flex-col transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] overflow-hidden z-20 flex-shrink-0 relative"
     :class="store.isSidebarOpen ? 'w-80 shadow-[4px_0_24px_rgba(0,0,0,0.03)]' : 'w-0 opacity-0'"
   >
+    <!-- Delete Confirmation Dialog -->
+    <el-dialog
+      v-model="deleteDialogVisible"
+      title="提示"
+      width="260"
+      :show-close="false"
+      :append-to-body="false"
+      class="delete-confirm-dialog"
+    >
+      <span class="text-sm text-on-surface">
+        确定要删除 "{{ fileToDelete?.name.replace(/\.md$/, '') }}" 吗？
+      </span>
+      <template #footer>
+        <div class="flex gap-2 justify-end">
+          <el-button size="small" @click="deleteDialogVisible = false">取消</el-button>
+          <el-button size="small" type="danger" @click="confirmDelete">删除</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- Fixed width container inside so content doesn't squeeze during animation -->
     <div class="w-80 h-full flex flex-col font-['Manrope'] antialiased absolute top-0 left-0">
       <!-- Header -->
@@ -112,36 +189,68 @@ const handleCreateFile = async () => {
           <li 
             v-for="file in store.fileList" 
             :key="file.path"
-            class="group relative flex items-center justify-between rounded-lg px-4 py-2 cursor-pointer transition-all duration-200"
-            :class="[
-              store.activeFilePath === file.path 
-                ? 'bg-primary-container text-on-primary-container shadow-sm' 
-                : 'hover:bg-surface-container-highest text-on-surface'
-            ]"
-            @click="handleFileClick(file.path)"
+            class="group relative"
           >
-            <div class="flex items-center overflow-hidden flex-1 mr-2">
-              <span class="text-sm truncate font-medium align-middle leading-none">{{ file.name.replace(/\.md$/, '') }}</span>
-            </div>
-            
-            <!-- Actions -->
-            <el-popconfirm
-              :title="`确定删除 ${file.name.replace(/\.md$/, '')} 吗？`"
-              confirm-button-text="删除"
-              cancel-button-text="取消"
-              confirm-button-type="danger"
-              @confirm="store.deleteFile(file.path)"
-            >
-              <template #reference>
-                <button 
-                  class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-error/10 hover:text-error transition-all duration-200 shrink-0 transform scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100"
-                  :class="store.activeFilePath === file.path ? 'text-on-primary-container/70' : 'text-on-surface-variant'"
-                  @click.stop
+            <el-dropdown trigger="contextmenu" @command="handleContextMenu" class="!block w-full overflow-hidden">
+              <div
+                class="flex items-center rounded-lg px-4 py-2 cursor-pointer transition-all duration-200 overflow-hidden"
+                :class="[
+                  store.activeFilePath === file.path 
+                    ? 'bg-primary/10 text-primary font-medium' 
+                    : 'hover:bg-surface-container-highest text-on-surface'
+                ]"
+                @click="handleFileClick(file.path)"
+                @dblclick="startRename(file)"
+              >
+                <div class="flex-1 min-w-0 overflow-hidden mr-2">
+                  <input
+                    v-if="editingFileStr === file.path"
+                    :ref="(el) => { if (el) editInputRefs[file.path] = el as HTMLInputElement }"
+                    v-model="editingFileName"
+                    @keyup.enter="finishRename"
+                    @keyup.esc="cancelRename"
+                    @blur="finishRename"
+                    @click.stop
+                    class="bg-surface-container-highest border border-primary/30 rounded px-1.5 py-0.5 focus:outline-none text-sm text-on-surface w-full"
+                  />
+                  <span v-else class="text-sm truncate font-medium leading-none select-none block">
+                    {{ file.name.replace(/\.md$/, '') }}
+                  </span>
+                </div>
+                
+                <!-- Actions -->
+                <el-popconfirm
+                  :title="`确定删除 ${file.name.replace(/\.md$/, '')} 吗？`"
+                  confirm-button-text="删除"
+                  cancel-button-text="取消"
+                  confirm-button-type="danger"
+                  @confirm="store.deleteFile(file.path)"
                 >
-                  <span class="material-symbols-outlined text-[18px]">delete</span>
-                </button>
+                  <template #reference>
+                    <button 
+                      class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-error/10 hover:text-error transition-all duration-200 shrink-0 transform scale-90 opacity-0 group-hover:scale-100 group-hover:opacity-100 text-on-surface-variant"
+                      @click.stop
+                    >
+                      <span class="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </template>
+                </el-popconfirm>
+              </div>
+
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :command="{ action: 'duplicate', file }">
+                    <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">content_copy</span>创建副本</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="{ action: 'rename', file }">
+                    <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">edit</span>重命名</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item :command="{ action: 'delete', file }" class="!text-error">
+                    <span class="flex items-center gap-2"><span class="material-symbols-outlined text-[18px]">delete</span>删除</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
               </template>
-            </el-popconfirm>
+            </el-dropdown>
           </li>
         </ul>
       </div>

@@ -7,6 +7,20 @@ import { useResumeStore } from '../stores/resume'
 const editorContainer = ref<HTMLElement | null>(null)
 const store = useResumeStore()
 let view: EditorView | null = null
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+/** 标志位：当前 dispatch 是由外部（watch/openFile）触发的，不应触发自动保存 */
+let isExternalUpdate = false
+
+/** 防抖自动保存：停止输入 1 秒后保存文件 */
+const scheduleAutoSave = () => {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(async () => {
+    if (store.activeFilePath) {
+      await store.saveCurrentFile(true) // silent: 自动保存不弹通知
+    }
+    autoSaveTimer = null
+  }, 1000)
+}
 
 onMounted(() => {
   if (!editorContainer.value) return
@@ -20,6 +34,10 @@ onMounted(() => {
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           store.markdownContent = update.state.doc.toString()
+          // 只有用户真实输入才触发自动保存，外部赋值跳过
+          if (!isExternalUpdate) {
+            scheduleAutoSave()
+          }
         }
       }),
       EditorView.theme({
@@ -46,7 +64,15 @@ onMounted(() => {
   })
 })
 
-onBeforeUnmount(() => {
+onBeforeUnmount(async () => {
+  // 销毁前确保当前内容已保存
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  if (store.activeFilePath) {
+    await store.saveCurrentFile(true) // silent: 销毁时静默保存
+  }
   if (view) {
     view.destroy()
   }
@@ -54,9 +80,11 @@ onBeforeUnmount(() => {
 
 watch(() => store.markdownContent, (newVal) => {
   if (view && view.state.doc.toString() !== newVal) {
+    isExternalUpdate = true
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: newVal }
     })
+    isExternalUpdate = false
   }
 })
 

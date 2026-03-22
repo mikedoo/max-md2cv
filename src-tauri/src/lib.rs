@@ -293,6 +293,16 @@ async fn delete_resume(path: String) -> Result<(), String> {
     trash::delete(path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn rename_resume(old_path: String, new_path: String) -> Result<(), String> {
+    std::fs::rename(old_path, new_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn duplicate_resume(path: String, new_path: String) -> Result<(), String> {
+    std::fs::copy(path, new_path).map_err(|e| e.to_string()).map(|_| ())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -308,7 +318,9 @@ pub fn run() {
             list_resumes,
             read_resume,
             write_resume,
-            delete_resume
+            delete_resume,
+            rename_resume,
+            duplicate_resume
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

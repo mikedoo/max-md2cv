@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* =========================================================================
-   1. 设计系统变量 (The Digital Curator / Soft Minimalist)
+   1. 设计系统变量 (Soft Minimalist)
    ========================================================================= */
 @theme {
   --color-error-container: #ffdad6;
@@ -82,20 +82,22 @@
    3. 通用组件抽象 (Components)
    ========================================================================= */
 @layer components {
+
   /* No-Line 软卡片 */
   .card-soft {
     @apply bg-surface-container-lowest rounded-2xl;
   }
-  
+
   /* 幽灵边框 Fallback */
   .ghost-border {
     border: 1px solid color-mix(in srgb, var(--color-outline-variant) 15%, transparent);
   }
 
-  /* The Digital Curator 专属主按钮 */
+  /* 专属主按钮 */
   .btn-primary {
     @apply flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-primary-container text-white rounded-full font-bold shadow-ambient hover:shadow-lg active:scale-95 transition-all text-xs;
   }
+
   .btn-primary:disabled {
     @apply opacity-50 cursor-not-allowed active:scale-100;
   }
@@ -105,9 +107,11 @@
     width: 4px;
     height: 4px;
   }
+
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background: var(--color-surface-variant);
     border-radius: 10px;
@@ -133,30 +137,19 @@
   --el-text-color-primary: var(--color-on-surface);
   --el-text-color-regular: var(--color-on-surface-variant);
   --el-text-color-secondary: var(--color-outline);
-  
+
   /* 贯彻 No-Line Rule：去除默认浅灰边框 */
   --el-border-color: transparent;
   --el-border-color-light: transparent;
-  
+
   --el-fill-color-light: var(--color-surface-container);
   --el-fill-color-lighter: var(--color-surface-container-high);
 
   --el-border-radius-base: var(--radius-DEFAULT);
   --el-border-radius-small: 0.5rem;
   --el-border-radius-round: var(--radius-full);
-  
+
   /* 覆盖悬浮阴影为你定制的 Ambient Shadow */
   --el-box-shadow: var(--shadow-ambient);
   --el-box-shadow-light: var(--shadow-ambient);
 }
-/* -------------------------------------------------------------------------
-   5. el-color-picker 精简：隐藏 Clear / OK 按钮，保留 Hex 输入框
-   ------------------------------------------------------------------------- */
-.el-color-dropdown__btns .el-color-footer__link-btn,
-.el-color-dropdown__btns .el-color-footer__btn {
-  display: none !important;
-}
-.el-color-dropdown__btns {
-  justify-content: center !important;
-}
-

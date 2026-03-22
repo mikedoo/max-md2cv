@@ -25,9 +25,12 @@ export interface ResumeStyle {
   h1Size: number;     // H1 size in px
   h2Size: number;     // H2 size in px
   h3Size: number;     // H3 size in px
+  dateSize?: number;  // Date size in px
+  dateWeight?: string;// Date font weight (CSS)
   lineHeight: number;
   marginV: number;    // mm
   marginH: number;    // mm
+  jobIntentionColor?: string; // override color
 }
 
 export const useResumeStore = defineStore("resume", () => {
@@ -40,12 +43,14 @@ export const useResumeStore = defineStore("resume", () => {
 
   // Styling state
   const resumeStyle = ref<ResumeStyle>({
-    themeColor: '#3b82f6',
+    themeColor: '#4c49cc',
     fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
     fontSize: 14,
     h1Size: 28,
     h2Size: 20,
     h3Size: 16,
+    dateSize: 14,
+    dateWeight: '',
     lineHeight: 1.6,
     marginV: 15,
     marginH: 20
@@ -57,6 +62,7 @@ export const useResumeStore = defineStore("resume", () => {
   const activeFilePath = ref<string | null>(null);
   const isSidebarOpen = ref(false);
   const shouldShowWorkspaceDialog = ref(false);
+  const photoBase64 = ref<string | null>(null);
 
   /** Load templates dynamically from Tauri backend */
   const loadTemplates = async () => {
@@ -126,12 +132,13 @@ export const useResumeStore = defineStore("resume", () => {
     }
   };
 
-  /** Save current file content if there is an active file */
-  const saveCurrentFile = async () => {
+  /** Save current file content if there is an active file.
+   * @param silent - if true, suppress the success toast (used by auto-save) */
+  const saveCurrentFile = async (silent = false) => {
     if (activeFilePath.value) {
       try {
         await invoke("write_resume", { path: activeFilePath.value, content: markdownContent.value });
-        ElMessage.success("已保存");
+        if (!silent) ElMessage.success("已保存");
       } catch (err) {
         console.error("Failed to save file:", err);
         ElMessage.error("保存失败");
@@ -172,10 +179,60 @@ export const useResumeStore = defineStore("resume", () => {
           }
         }
       }
-      ElMessage.success("删除成功");
+      ElMessage.success("已移动到回收站");
     } catch (err) {
       console.error("Failed to delete file:", err);
       ElMessage.error("删除失败");
+    }
+  };
+
+  /** Rename a file */
+  const renameFile = async (oldPath: string, newName: string) => {
+    if (!workspacePath.value) return;
+    try {
+      let finalName = newName.trim();
+      if (!finalName) return;
+      if (!finalName.endsWith('.md')) {
+        finalName += '.md';
+      }
+      const newPath = await join(workspacePath.value, finalName);
+      if (oldPath === newPath) return; // Same name
+      await invoke("rename_resume", { oldPath, newPath });
+      await refreshFileList(workspacePath.value);
+      if (activeFilePath.value === oldPath) {
+        await openFile(newPath);
+      }
+      ElMessage.success("重命名成功");
+    } catch (err) {
+      console.error("Failed to rename file:", err);
+      ElMessage.error("重命名失败");
+    }
+  };
+
+  /** Duplicate a file */
+  const duplicateFile = async (path: string) => {
+    if (!workspacePath.value) return;
+    try {
+      const originalFile = fileList.value.find(f => f.path === path);
+      if (!originalFile) return;
+
+      const baseName = originalFile.name.replace(/\.md$/, '');
+      let newName = `${baseName}-副本.md`;
+      let newPath = await join(workspacePath.value, newName);
+      
+      let counter = 1;
+      while (fileList.value.some(f => f.path === newPath)) {
+        counter++;
+        newName = `${baseName}-副本(${counter}).md`;
+        newPath = await join(workspacePath.value, newName);
+      }
+
+      await invoke("duplicate_resume", { path, newPath });
+      await refreshFileList(workspacePath.value);
+      ElMessage.success("创建副本成功");
+    } catch (err) {
+      console.error("Failed to duplicate file:", err);
+      ElMessage.error("创建副本失败");
     }
   };
 
@@ -189,7 +246,7 @@ export const useResumeStore = defineStore("resume", () => {
     const style = resumeStyle.value;
     const marker = '/* @user-overrides */';
     const baseCSS = tpl.css.split(marker)[0].trimEnd();
-    const patchCSS = `\n\n${marker}\n.resume-document {\n  font-family: ${style.fontFamily};\n  font-size: ${style.fontSize}px;\n  line-height: ${style.lineHeight};\n}\n.resume-document h1 { font-size: ${style.h1Size}px; }\n.resume-document h2 { font-size: ${style.h2Size}px; }\n.resume-document h3 { font-size: ${style.h3Size}px; }\n@page { margin: ${style.marginV}mm ${style.marginH}mm; }\n`;
+    const patchCSS = `\n\n${marker}\n.resume-document {\n  font-family: ${style.fontFamily};\n  font-size: ${style.fontSize}px;\n  line-height: ${style.lineHeight};\n}\n.resume-document h1 { font-size: ${style.h1Size}px; }\n.resume-document h2 { font-size: ${style.h2Size}px; }\n.resume-document h3 { font-size: ${style.h3Size}px; }\n@page { margin: ${style.marginV}mm ${style.marginH}mm; }\n.resume-document h2 { border-left-color: ${style.themeColor}; background-color: color-mix(in srgb, ${style.themeColor} 10%, transparent); }\n`;
     const newCSS = baseCSS + patchCSS;
     try {
       await invoke("save_template", { id: tpl.id, css: newCSS });
@@ -249,6 +306,9 @@ export const useResumeStore = defineStore("resume", () => {
     saveCurrentFile,
     createFile,
     deleteFile,
-    refreshFileList
+    renameFile,
+    duplicateFile,
+    refreshFileList,
+    photoBase64
   };
 });

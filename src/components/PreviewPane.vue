@@ -1,13 +1,37 @@
 <script setup lang="ts">
 import { ref, shallowRef, watch, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import { Previewer } from 'pagedjs'
 import { useResumeStore } from '../stores/resume'
 import { useDebounceFn } from '@vueuse/core'
+import { enhanceResumeHtml } from '../utils/resumeParser'
 
 const store = useResumeStore()
 const previewContainer = ref<HTMLElement | null>(null)
 let paged: any = null
+
+const photoInput = ref<HTMLInputElement | null>(null)
+const jobColorInput = ref<HTMLInputElement | null>(null)
+
+const handlePhotoUpload = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+
+  if (file.size > 1024 * 1024) {
+    ElMessage.error('照片大小不能超过 1MB')
+    target.value = ''
+    return
+  }
+
+  const reader = new FileReader()
+  reader.onload = (evt) => {
+    store.photoBase64 = evt.target?.result as string
+    target.value = ''
+  }
+  reader.readAsDataURL(file)
+}
 
 const zoomLevel = ref(100)
 const zoomIn = () => { if (zoomLevel.value < 200) zoomLevel.value += 10 }
@@ -59,6 +83,17 @@ onMounted(async () => {
   await store.loadTemplates()
   syncDefaultsFromTemplate()
   renderPdfPreview(store.markdownContent)
+
+  if (previewContainer.value) {
+    previewContainer.value.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement
+      if (target.closest('.resume-photo-wrapper')) {
+        photoInput.value?.click()
+      } else if (target.closest('.job-intention')) {
+        jobColorInput.value?.click()
+      }
+    })
+  }
 })
 
 // ─── CSS Parsing ──────────────────────────────────────────────────────────────
@@ -102,19 +137,27 @@ const syncDefaultsFromTemplate = () => {
   store.resumeStyle.h3Size = toNum(h3Raw, 16)
 
   // Theme color: try h2 color first, then h1
-  const themeColorRaw = extractCssProp(css, '\\.resume-document h2', 'color', '')
-    || extractCssProp(css, '\\.resume-document h1', 'color', '#3b82f6')
-  store.resumeStyle.themeColor = themeColorRaw.startsWith('var(') ? '#3b82f6' : themeColorRaw
+  // Extract fallback from var() expressions, e.g. var(--cv-theme-color, #4c49cc) → #4c49cc
+  const parseColor = (raw: string, fallback: string): string => {
+    if (!raw) return fallback
+    const varMatch = raw.match(/var\([^,]+,\s*([^)]+)\)/)
+    if (varMatch) return varMatch[1].trim()
+    if (raw.startsWith('var(')) return fallback
+    return raw
+  }
+  const themeColorRaw = extractCssProp(css, '.resume-document h2', 'color', '')
+    || extractCssProp(css, '.resume-document h1', 'color', '#4c49cc')
+  store.resumeStyle.themeColor = parseColor(themeColorRaw, '#4c49cc')
 
   // Body font size
-  const bodyFontRaw = extractCssProp(css, '\\.resume-document', 'font-size', '14px')
+  const bodyFontRaw = extractCssProp(css, '.resume-document', 'font-size', '14px')
   store.resumeStyle.fontSize = toNum(bodyFontRaw, 14)
 
   // Page margins from @page rule
-  const pageMarginRaw = extractCssProp(css, '@page', 'margin', '15mm 20mm')
+  const pageMarginRaw = extractCssProp(css, '@page', 'margin', '10mm 15mm')
   const marginParts = pageMarginRaw.match(/([\d.]+)/g) ?? []
-  store.resumeStyle.marginV = marginParts.length >= 1 ? parseFloat(marginParts[0]) : 15
-  store.resumeStyle.marginH = marginParts.length >= 2 ? parseFloat(marginParts[1]) : store.resumeStyle.marginV
+  store.resumeStyle.marginV = marginParts.length >= 1 ? parseFloat(marginParts[0] as string) : 10
+  store.resumeStyle.marginH = marginParts.length >= 2 ? parseFloat(marginParts[1] as string) : store.resumeStyle.marginV
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -139,6 +182,8 @@ const renderPdfPreview = async (markdownText: string) => {
       font-family: ${cvStyle.fontFamily} !important;
       font-size: ${cvStyle.fontSize}px !important;
       line-height: ${cvStyle.lineHeight} !important;
+      ${cvStyle.dateWeight ? `--cv-date-weight: ${cvStyle.dateWeight};` : ''}
+      ${cvStyle.dateSize ? `--cv-date-size: ${cvStyle.dateSize}px;` : ''}
     }
     .resume-document h1 {
       font-size: ${cvStyle.h1Size}px !important;
@@ -155,8 +200,16 @@ const renderPdfPreview = async (markdownText: string) => {
     }
   `
 
+  const photoHtml = `
+    <div class="resume-photo-wrapper" title="点击上传证件照 (最大1MB)">
+      ${store.photoBase64 ? `<img src="${store.photoBase64}" />` : '<div class="photo-placeholder-text"><span class="material-symbols-outlined" style="font-size: 24px; margin-bottom: 4px;">add_a_photo</span><br/><span>添加证件照</span></div>'}
+    </div>
+  `
+
+  let finalHtml = enhanceResumeHtml(htmlContent, store.resumeStyle)
+
   const sourceDiv = document.createElement('div')
-  sourceDiv.innerHTML = `<style>${cssText}</style><style>${injectCss}</style><div class="resume-document">${htmlContent}</div>`
+  sourceDiv.innerHTML = `<style>${cssText}</style><style>${injectCss}</style><div class="resume-document">${photoHtml}${finalHtml}</div>`
 
   previewContainer.value.innerHTML = ''
   paged = new Previewer()
@@ -179,6 +232,10 @@ watch(() => store.markdownContent, (newVal) => {
   debouncedRender(newVal)
 })
 
+watch(() => store.photoBase64, () => {
+  debouncedRender(store.markdownContent)
+})
+
 watch(() => store.activeTemplate, () => {
   syncDefaultsFromTemplate()
   debouncedRender(store.markdownContent)
@@ -191,6 +248,22 @@ watch(() => store.resumeStyle, () => {
 
 <template>
   <section class="flex flex-col card-soft ghost-border shadow-ambient overflow-hidden relative">
+    <!-- Hidden file input for photo upload -->
+    <input 
+      type="file" 
+      ref="photoInput" 
+      accept="image/*" 
+      class="hidden" 
+      @change="handlePhotoUpload" 
+    />
+    <input 
+      type="color" 
+      ref="jobColorInput" 
+      class="hidden" 
+      :value="store.resumeStyle.jobIntentionColor || store.resumeStyle.themeColor"
+      @input="(e) => store.resumeStyle.jobIntentionColor = (e.target as HTMLInputElement).value" 
+    />
+
     <!-- Preview Controls -->
     <div class="h-14 shrink-0 flex items-center px-6 justify-between bg-surface-container-high/40 backdrop-blur-sm border-b border-outline-variant/10 z-10">
       <div class="flex items-center gap-2">
@@ -226,15 +299,63 @@ watch(() => store.resumeStyle, () => {
           />
         </el-select>
 
-        <!-- Theme Color: instant update, no OK/Clear needed -->
-        <el-color-picker
-          :model-value="store.resumeStyle.themeColor"
-          @active-change="(v: string) => { if (v) store.resumeStyle.themeColor = v }"
-          @change="(v: string | null) => { if (v) store.resumeStyle.themeColor = v }"
-          size="small"
-          :predefine="['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#000000', '#333333']"
-          class="no-clear-picker"
-        />
+        <!-- Custom Theme Color Picker (Replaces el-color-picker) -->
+        <el-popover placement="bottom" trigger="click" :width="240">
+          <template #reference>
+            <div class="h-8 rounded-md border border-outline-variant/30 bg-surface-container-lowest px-2 flex items-center justify-center cursor-pointer hover:bg-surface-container-highest transition-colors" title="主题色">
+              <div 
+                class="w-4 h-4 rounded-full border border-outline-variant/50 shadow-inner"
+                :style="{ backgroundColor: store.resumeStyle.themeColor }"
+              ></div>
+            </div>
+          </template>
+
+          <div class="flex flex-col gap-3 font-sans">
+            <div class="text-xs font-bold text-on-surface-variant flex justify-between items-center">
+              <span>选择颜色</span>
+            </div>
+            
+            <!-- Predefined Colors -->
+            <div class="grid grid-cols-5 gap-2">
+              <div 
+                v-for="color in ['#4c49cc', '#ef4444', '#10b981', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#000000', '#333333']" 
+                :key="color"
+                @click="store.resumeStyle.themeColor = color"
+                class="w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center transition-transform hover:scale-110 shadow-sm border border-outline-variant/20"
+                :style="{ backgroundColor: color }"
+              >
+                <span v-if="store.resumeStyle.themeColor.toLowerCase() === color.toLowerCase()" class="material-symbols-outlined text-white text-[16px] drop-shadow-md">check</span>
+              </div>
+            </div>
+            
+            <div class="h-[1px] w-full bg-outline-variant/20 my-1"></div>
+            
+            <!-- Custom Color & Hex -->
+            <div class="flex items-center gap-3">
+              <div class="relative w-8 h-8 rounded-lg overflow-hidden border border-outline-variant/30 shadow-sm cursor-pointer flex-shrink-0">
+                <div class="absolute inset-0 z-0" :style="{ backgroundColor: store.resumeStyle.themeColor }"></div>
+                <!-- Eyedropper Icon -->
+                <span class="material-symbols-outlined absolute inset-0 w-5 h-5 m-auto z-10 text-white/80 drop-shadow flex items-center justify-center text-[18px] pointer-events-none">colorize</span>
+                <input 
+                  type="color" 
+                  v-model="store.resumeStyle.themeColor"
+                  class="absolute inset-[-10px] w-12 h-12 opacity-0 cursor-pointer z-20"
+                />
+              </div>
+              
+              <div class="flex-1 px-3 py-1.5 bg-surface-container rounded-md border border-outline-variant/30 flex items-center">
+                <span class="text-on-surface-variant/50 text-xs font-mono mr-1">#</span>
+                <input 
+                  type="text" 
+                  :value="store.resumeStyle.themeColor.replace('#', '')"
+                  @input="(e) => { const v = (e.target as HTMLInputElement).value; if(/^[0-9A-Fa-f]{6}$/.test(v)) store.resumeStyle.themeColor = '#' + v }"
+                  class="bg-transparent border-none outline-none text-xs text-on-surface-variant w-full font-mono uppercase"
+                  maxlength="6"
+                />
+              </div>
+            </div>
+          </div>
+        </el-popover>
 
         <!-- Font Size Dropdown -->
         <el-dropdown trigger="click" :hide-on-click="false">
@@ -270,6 +391,25 @@ watch(() => store.resumeStyle, () => {
                 <span class="text-primary">{{ store.resumeStyle.fontSize }}px</span>
               </div>
               <el-slider v-model="store.resumeStyle.fontSize" :min="10" :max="20" :step="1" :show-tooltip="false" />
+              
+              <div class="h-[1px] w-full bg-outline-variant/20 my-4"></div>
+
+              <!-- Date customization -->
+              <div class="text-xs font-bold text-on-surface-variant mb-2 flex justify-between">
+                <span>日期大小</span>
+                <span class="text-primary">{{ store.resumeStyle.dateSize }}px</span>
+              </div>
+              <el-slider v-model="store.resumeStyle.dateSize" :min="10" :max="20" :step="1" :show-tooltip="false" />
+              
+              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2">日期粗细</div>
+              <el-select v-model="store.resumeStyle.dateWeight" size="small" style="width: 100%">
+                <el-option label="默认 (由模板决定)" value="" />
+                <el-option label="极细 (Lighter)" value="300" />
+                <el-option label="常规 (Normal)" value="400" />
+                <el-option label="中等 (Medium)" value="500" />
+                <el-option label="加粗 (Bold)" value="700" />
+                <el-option label="黑体 (Bolder)" value="900" />
+              </el-select>
             </div>
           </template>
         </el-dropdown>
@@ -343,7 +483,7 @@ watch(() => store.resumeStyle, () => {
         <template #reference>
           <button class="text-xs flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
             <span class="material-symbols-outlined text-[14px]">save</span>
-            覆盖保存模板
+            覆盖模板
           </button>
         </template>
       </el-popconfirm>
