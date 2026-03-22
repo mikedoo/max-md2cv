@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useResumeStore } from '../stores/resume';
 import { invoke } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
@@ -7,6 +8,13 @@ import 'element-plus/es/components/message/style/css';
 import 'element-plus/es/components/message-box/style/css';
 
 const store = useResumeStore();
+const currentFileName = computed(() => {
+  if (!store.activeFilePath) {
+    return '';
+  }
+
+  return store.activeFilePath.split(/[/\\]/).pop()?.replace(/\.md$/, '') ?? '';
+});
 
 const handleExport = async () => {
   if (!store.activeFilePath || !store.workspacePath) {
@@ -117,6 +125,13 @@ const handleExport = async () => {
         >
           <i class="bi bi-layout-sidebar text-on-surface text-[20px] group-hover:text-primary transition-colors"></i>
         </button>
+        <div
+          v-if="currentFileName"
+          class="max-w-[20rem] truncate text-sm font-semibold tracking-[0.02em] text-on-surface"
+          :title="currentFileName"
+        >
+          {{ currentFileName }}
+        </div>
       </div>
       <div class="flex items-center gap-4">
         <button 

@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { ref, shallowRef, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import { Previewer } from 'pagedjs'
 import { useResumeStore, type ResumeStyle } from '../stores/resume'
 import { useDebounceFn } from '@vueuse/core'
 import { enhanceResumeHtml } from '../utils/resumeParser'
+import { MANUAL_PAGE_BREAK_MARKER, renderManualPageBreaks } from '../utils/manualPageBreak'
 
 const store = useResumeStore()
 const previewContainer = ref<HTMLElement | null>(null)
+const previewScrollContainer = ref<HTMLElement | null>(null)
 let paged: any = null
+let activeRenderPromise: Promise<void> | null = null
+let pendingRenderRequest: PreviewRenderRequest | null = null
 
 const photoInput = ref<HTMLInputElement | null>(null)
 
@@ -37,51 +41,87 @@ const zoomIn = () => { if (zoomLevel.value < 200) zoomLevel.value += 10 }
 const zoomOut = () => { if (zoomLevel.value > 50) zoomLevel.value -= 10 }
 
 const totalPages = ref(0)
+const manualPageBreakHint = `${MANUAL_PAGE_BREAK_MARKER} 手动分页`
 
-// ─── System Fonts ────────────────────────────────────────────────────────────
-// Common fonts available on Windows/macOS/Linux, shown with their real names
-const COMMON_FONTS = [
-  { label: 'Arial', value: 'Arial' },
+interface PreviewRenderRequest {
+  markdownText: string
+  templateId: string
+  cssText: string
+  cvStyle: ResumeStyle
+  photoBase64: string | null
+}
+
+const createPreviewStagingContainer = () => {
+  const stagingContainer = document.createElement('div')
+  const previewWidth = previewContainer.value?.getBoundingClientRect().width
+    ?? previewScrollContainer.value?.clientWidth
+    ?? window.innerWidth
+
+  stagingContainer.className = 'pagedjs-wrapper'
+  stagingContainer.setAttribute('aria-hidden', 'true')
+  stagingContainer.style.position = 'fixed'
+  stagingContainer.style.left = '-100000px'
+  stagingContainer.style.top = '0'
+  stagingContainer.style.visibility = 'hidden'
+  stagingContainer.style.pointerEvents = 'none'
+  stagingContainer.style.zIndex = '-1'
+  stagingContainer.style.width = `${previewWidth}px`
+
+  document.body.appendChild(stagingContainer)
+
+  return stagingContainer
+}
+
+// ─── Resume Fonts ────────────────────────────────────────────────────────────
+// Fixed set of common Chinese and English resume fonts
+const FONT_OPTIONS = [
+  { label: '苹方', value: '"PingFang SC", "Microsoft YaHei", sans-serif' },
+  { label: '微软雅黑', value: '"Microsoft YaHei", "PingFang SC", sans-serif' },
+  { label: '黑体', value: '"SimHei", "Microsoft YaHei", sans-serif' },
+  { label: '宋体', value: '"SimSun", "Times New Roman", serif' },
+  { label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
+  { label: 'Arial', value: 'Arial, sans-serif' },
   { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
-  { label: 'Helvetica Neue', value: '"Helvetica Neue", Helvetica, Arial, sans-serif' },
-  { label: 'Georgia', value: 'Georgia, serif' },
-  { label: 'Garamond', value: 'Garamond, serif' },
-  { label: 'Courier New', value: '"Courier New", Courier, monospace' },
-  { label: '微软雅黑 (YaHei)', value: '"Microsoft YaHei", sans-serif' },
-  { label: '宋体 (SimSun)', value: 'SimSun, serif' },
-  { label: '黑体 (SimHei)', value: 'SimHei, sans-serif' },
-  { label: '楷体 (KaiTi)', value: 'KaiTi, serif' },
-  { label: '仿宋 (FangSong)', value: 'FangSong, serif' },
-  { label: 'PingFang SC', value: '"PingFang SC", sans-serif' },
-  { label: 'Hiragino Kaku Gothic', value: '"Hiragino Kaku Gothic ProN", sans-serif' },
-]
-const fontOptions = shallowRef(COMMON_FONTS)
+] as const
 
-// Try to enrich with actual system fonts via Font Access API
-onMounted(async () => {
-  try {
-    // @ts-ignore – queryLocalFonts is non-standard but available in Chromium (Tauri uses WebView)
-    if (typeof window.queryLocalFonts === 'function') {
-      const fonts: { family: string }[] = await (window as any).queryLocalFonts()
-      const seen = new Set<string>()
-      const systemFonts = fonts
-        .filter(f => {
-          if (seen.has(f.family)) return false
-          seen.add(f.family)
-          return true
-        })
-        .map(f => ({ label: f.family, value: `"${f.family}", sans-serif` }))
-      if (systemFonts.length > 0) {
-        fontOptions.value = systemFonts
-      }
-    }
-  } catch {
-    // queryLocalFonts not available – keep the static list
+const DEFAULT_FONT_FAMILY = FONT_OPTIONS[0].value
+
+const normalizeFontFamily = (fontFamily?: string | null): string => {
+  const resolvedFontFamily = (fontFamily ?? '')
+    .replace(/^var\(\s*--[^,]+,\s*(.+)\)$/, '$1')
+
+  const primaryFont = resolvedFontFamily
+    .split(',')[0]
+    ?.replace(/["']/g, '')
+    .trim()
+    .toLowerCase()
+
+  switch (primaryFont) {
+    case 'pingfang sc':
+      return FONT_OPTIONS[0].value
+    case 'microsoft yahei':
+      return FONT_OPTIONS[1].value
+    case 'simhei':
+      return FONT_OPTIONS[2].value
+    case 'simsun':
+      return FONT_OPTIONS[3].value
+    case 'helvetica':
+    case 'helvetica neue':
+      return FONT_OPTIONS[4].value
+    case 'arial':
+    case 'arial narrow':
+      return FONT_OPTIONS[5].value
+    case 'times new roman':
+      return FONT_OPTIONS[6].value
+    default:
+      return DEFAULT_FONT_FAMILY
   }
+}
 
+onMounted(async () => {
   await store.loadTemplates()
   syncDefaultsFromTemplate()
-  renderPdfPreview(store.markdownContent)
+  schedulePreviewRender(store.markdownContent)
 
   if (previewContainer.value) {
     previewContainer.value.addEventListener('click', (e) => {
@@ -152,6 +192,17 @@ const extractCssProp = (css: string, selector: string, prop: string, fallback: s
   return fallback
 }
 
+const resolveCssFallbackValue = (raw: string, fallback: string): string => {
+  const value = raw.trim()
+  if (!value.startsWith('var(')) return value
+
+  const inner = value.slice(4, -1)
+  const commaIndex = inner.indexOf(',')
+  if (commaIndex === -1) return fallback
+
+  return inner.slice(commaIndex + 1).trim() || fallback
+}
+
 const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
   @page {
     size: A4;
@@ -170,7 +221,6 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     --cv-photo-gap: 18px;
     --cv-photo-radius: 8px;
     --cv-photo-reserve: calc(var(--cv-photo-width) + var(--cv-photo-gap));
-    --cv-contact-render: ${cvStyle.personalInfoMode || 'text'};
     font-family: ${cvStyle.fontFamily} !important;
     font-size: ${cvStyle.fontSize}px !important;
     line-height: ${cvStyle.lineHeight} !important;
@@ -264,17 +314,29 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     font-size: ${cvStyle.h3Size}px !important;
     color: ${cvStyle.themeColor} !important;
   }
+  .resume-document .manual-page-break {
+    break-before: page;
+    page-break-before: always;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
 `
 
 const syncDefaultsFromTemplate = () => {
   const tpl = store.availableTemplates.find(t => t.id === store.activeTemplate)
   const css = tpl?.css ?? ''
 
-  const lineHeightRaw = extractCssProp(css, '.resume-document', 'line-height', '1.6')
+  const lineHeightRaw = resolveCssFallbackValue(
+    extractCssProp(css, '.resume-document', 'line-height', '1.6'),
+    '1.6'
+  )
   const lineHeight = parseFloat(lineHeightRaw)
 
-  const fontFamily = extractCssProp(css, '.resume-document', 'font-family',
-    '"PingFang SC", "Microsoft YaHei", sans-serif')
+  const fontFamily = normalizeFontFamily(
+    extractCssProp(css, '.resume-document', 'font-family', DEFAULT_FONT_FAMILY)
+  )
 
   // Parse heading sizes from the template
   const h1Raw = extractCssProp(css, '.resume-document h1', 'font-size', '28px')
@@ -324,52 +386,109 @@ const syncDefaultsFromTemplate = () => {
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
-const renderPdfPreview = async (markdownText: string) => {
+const createPreviewRenderRequest = (markdownText: string): PreviewRenderRequest => {
+  const activeTemplateData = store.availableTemplates.find(t => t.id === store.activeTemplate)
+
+  return {
+    markdownText,
+    templateId: store.activeTemplate,
+    cssText: activeTemplateData?.css ?? '',
+    cvStyle: { ...store.resumeStyle },
+    photoBase64: store.photoBase64,
+  }
+}
+
+const renderPdfPreview = async (request: PreviewRenderRequest) => {
   if (!previewContainer.value) return
 
-  // Clean up previous Paged.js injected styles
-  document.querySelectorAll('style[data-pagedjs-inserted-styles]').forEach(el => el.remove())
+  const scrollContainer = previewScrollContainer.value
+  const preservedScrollTop = scrollContainer?.scrollTop ?? 0
+  const preservedScrollLeft = scrollContainer?.scrollLeft ?? 0
+  const previousPagedStyles = Array.from(document.querySelectorAll('style[data-pagedjs-inserted-styles]'))
+  const previousPagedStyleSet = new Set(previousPagedStyles)
+  const stagingContainer = createPreviewStagingContainer()
+  let renderSucceeded = false
 
-  const activeTemplateData = store.availableTemplates.find(t => t.id === store.activeTemplate)
-  const cssText = activeTemplateData?.css ?? ''
-  const htmlContent = await marked.parse(markdownText)
-
-  const cvStyle = store.resumeStyle
+  const htmlContent = await marked.parse(renderManualPageBreaks(request.markdownText))
+  const cvStyle = request.cvStyle
 
   const injectCss = buildPreviewStyles(cvStyle)
   const stylesheetSources = [
-    { [`${window.location.href}#template-${store.activeTemplate}`]: cssText },
+    { [`${window.location.href}#template-${request.templateId}`]: request.cssText },
     { [`${window.location.href}#runtime-preview`]: injectCss }
   ]
 
   const photoHtml = `
     <div class="resume-photo-wrapper" title="点击上传证件照 (最大1MB)">
-      ${store.photoBase64 ? `<img src="${store.photoBase64}" />` : '<div class="photo-placeholder-text"><span class="material-symbols-outlined" style="font-size: 24px; margin-bottom: 4px;">add_a_photo</span><br/><span>添加证件照</span></div>'}
+      ${request.photoBase64 ? `<img src="${request.photoBase64}" />` : '<div class="photo-placeholder-text"><span class="material-symbols-outlined" style="font-size: 24px; margin-bottom: 4px;">add_a_photo</span><br/><span>添加证件照</span></div>'}
     </div>
   `
 
-  let finalHtml = enhanceResumeHtml(htmlContent, store.resumeStyle, store.activeTemplate)
+  const finalHtml = enhanceResumeHtml(htmlContent, cvStyle, request.templateId)
 
   const sourceDiv = document.createElement('div')
   sourceDiv.innerHTML = `<div class="resume-document">${photoHtml}${finalHtml}</div>`
   const photoWrapper = sourceDiv.querySelector('.resume-photo-wrapper')
-  photoWrapper?.classList.add(store.photoBase64 ? 'has-photo' : 'is-empty')
+  photoWrapper?.classList.add(request.photoBase64 ? 'has-photo' : 'is-empty')
 
-  previewContainer.value.innerHTML = ''
   paged = new Previewer()
 
   try {
-    await paged.preview(sourceDiv, stylesheetSources, previewContainer.value)
+    await paged.preview(sourceDiv, stylesheetSources, stagingContainer)
+
+    previewContainer.value.replaceChildren(...Array.from(stagingContainer.childNodes))
+    previousPagedStyles.forEach(el => el.remove())
+
     // Count rendered pages
     totalPages.value = previewContainer.value?.querySelectorAll('.pagedjs_page').length ?? 0
+    renderSucceeded = true
   } catch (err) {
     console.error('Paged.js rendering error:', err)
     totalPages.value = 0
+  } finally {
+    if (!renderSucceeded) {
+      const currentPagedStyles = Array.from(document.querySelectorAll('style[data-pagedjs-inserted-styles]'))
+      currentPagedStyles
+        .filter(el => !previousPagedStyleSet.has(el))
+        .forEach(el => el.remove())
+    }
+
+    stagingContainer.remove()
+
+    if (scrollContainer) {
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTo({
+          top: preservedScrollTop,
+          left: preservedScrollLeft,
+          behavior: 'auto'
+        })
+      })
+    }
   }
 }
 
+const schedulePreviewRender = (markdownText: string) => {
+  pendingRenderRequest = createPreviewRenderRequest(markdownText)
+
+  if (activeRenderPromise) {
+    return activeRenderPromise
+  }
+
+  activeRenderPromise = (async () => {
+    while (pendingRenderRequest) {
+      const request = pendingRenderRequest
+      pendingRenderRequest = null
+      await renderPdfPreview(request)
+    }
+  })().finally(() => {
+    activeRenderPromise = null
+  })
+
+  return activeRenderPromise
+}
+
 const debouncedRender = useDebounceFn((text: string) => {
-  renderPdfPreview(text)
+  schedulePreviewRender(text)
 }, 500)
 
 watch(() => store.markdownContent, (newVal) => {
@@ -429,7 +548,7 @@ watch(() => store.resumeStyle, () => {
         <!-- Font Selection -->
         <el-select v-model="store.resumeStyle.fontFamily" size="small" style="width: 130px" placeholder="字体">
           <el-option
-            v-for="f in fontOptions"
+            v-for="f in FONT_OPTIONS"
             :key="f.value"
             :label="f.label"
             :value="f.value"
@@ -493,17 +612,6 @@ watch(() => store.resumeStyle, () => {
             </div>
           </div>
         </el-popover>
-
-        <el-select
-          v-if="store.activeTemplate === 'modern'"
-          v-model="store.resumeStyle.personalInfoMode"
-          size="small"
-          style="width: 108px"
-          placeholder="个人信息"
-        >
-          <el-option label="文本" value="text" />
-          <el-option label="图标" value="icon" />
-        </el-select>
 
         <!-- Font Size Dropdown -->
         <el-dropdown trigger="click" :hide-on-click="false">
@@ -603,7 +711,7 @@ watch(() => store.resumeStyle, () => {
     </div>
     
     <!-- Scrollable Preview Area -->
-    <div class="flex-1 overflow-auto custom-scrollbar p-10 bg-surface-variant/70 flex justify-center">
+    <div ref="previewScrollContainer" class="flex-1 overflow-auto custom-scrollbar p-10 bg-surface-variant/70 flex justify-center">
       <!-- Paged.js Render Container -->
       <div ref="previewContainer" class="pagedjs-wrapper overflow-visible transition-transform duration-200" :style="{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }"></div>
     </div>
@@ -638,6 +746,7 @@ watch(() => store.resumeStyle, () => {
       </div>
 
       <!-- Right: Page count -->
+      <span class="text-[11px] font-mono text-on-surface-variant/60 select-none">{{ manualPageBreakHint }}</span>
       <span class="text-[11px] text-on-surface-variant/60 select-none">
         <span v-if="totalPages > 0">共 {{ totalPages }} 页</span>
         <span v-else>渲染中...</span>

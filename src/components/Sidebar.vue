@@ -47,6 +47,10 @@ const handlePhotoClick = async (path: string) => {
   await store.selectPhoto(path)
 }
 
+const handlePhotoDelete = async (path: string) => {
+  await store.deletePhoto(path)
+}
+
 const handleCreateFile = async () => {
   if (!newFileName.value.trim()) {
     return
@@ -154,7 +158,7 @@ const confirmDelete = () => {
         </button>
       </div>
 
-      <div class="px-6 pt-4 pb-3 flex flex-col gap-3 shrink-0">
+      <div v-if="false" class="px-6 pt-4 pb-3 flex flex-col gap-3 shrink-0">
         <div class="flex items-center gap-2 w-full">
           <button
             class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-surface-container hover:bg-surface-container-highest transition-all duration-200 cursor-pointer text-sm font-medium text-on-surface shadow-sm"
@@ -409,7 +413,7 @@ const confirmDelete = () => {
               </button>
 
               <div class="rounded-[24px] bg-surface-container p-4 shadow-sm">
-                <div class="flex items-center justify-between gap-3 mb-3">
+                <div v-if="false" class="flex items-center justify-between gap-3 mb-3">
                   <div class="min-w-0">
                     <p class="text-sm font-semibold text-on-surface">当前证件照</p>
                     <p class="text-xs text-on-surface-variant truncate">
@@ -441,12 +445,38 @@ const confirmDelete = () => {
                   </div>
                 </div>
 
-                <p class="mt-3 text-xs leading-5 text-on-surface-variant">
+                <div
+                  v-if="store.currentPhotoPath"
+                  class="mt-3 flex items-center gap-2"
+                >
+                  <p class="min-w-0 flex-1 truncate text-sm font-medium text-on-surface">
+                    {{ currentPhotoName }}
+                  </p>
+
+                  <el-popconfirm
+                    :title="`确认删除 ${currentPhotoName} 吗？`"
+                    confirm-button-text="删除"
+                    cancel-button-text="取消"
+                    confirm-button-type="danger"
+                    @confirm="handlePhotoDelete(store.currentPhotoPath)"
+                  >
+                    <template #reference>
+                      <button
+                        class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-error/10 hover:text-error transition-all duration-200 shrink-0 text-on-surface-variant"
+                        @click.stop
+                      >
+                        <span class="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </template>
+                  </el-popconfirm>
+                </div>
+
+                <p v-else class="mt-3 text-xs leading-5 text-on-surface-variant">
                   上传后会保存到当前工作文件夹，并规范命名为 `IDphoto`、`IDphoto-2` 等。目录中已有该命名的图片时，会自动应用到所有简历。
                 </p>
               </div>
 
-              <div class="min-h-0 flex-1 rounded-[24px] bg-surface-container/80 p-3 shadow-sm">
+              <div v-if="false" class="min-h-0 flex-1 rounded-[24px] bg-surface-container/80 p-3 shadow-sm">
                 <div class="flex items-center justify-between px-1 pb-2">
                   <p class="text-sm font-semibold text-on-surface">目录中的图片</p>
                   <span class="text-xs text-on-surface-variant">{{ store.photoFileList.length }} 张</span>
@@ -506,6 +536,114 @@ const confirmDelete = () => {
           </div>
         </el-tab-pane>
       </el-tabs>
+
+      <div class="px-6 pt-3 pb-5 flex flex-col gap-3 shrink-0 border-t border-black/5 bg-surface-container-lowest">
+        <!--
+        <div
+          class="px-1 text-xs leading-5 text-on-surface-variant break-all min-h-[1.5rem]"
+          :title="store.workspacePath || undefined"
+        >
+          {{ store.workspacePath || 'çæ°­æ¹­é–«å¤‹å«¨å®¸ãƒ¤ç¶”é‚å›¦æ¬¢æ¾¶? }}
+        </div>
+
+        <transition name="fade">
+          <div
+            v-if="isCreating"
+            class="flex items-center gap-2 w-full bg-surface-container px-3 py-2 rounded-xl border border-primary/20 shadow-sm"
+          >
+            <input
+              v-model="newFileName"
+              @keyup.enter="handleCreateFile"
+              @keyup.esc="isCreating = false"
+              placeholder="é‚å›¦æ¬¢éš?.."
+              class="flex-1 bg-transparent border-none focus:outline-none text-sm text-on-surface min-w-0"
+              autofocus
+            />
+            <button
+              @click="isCreating = false"
+              class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-variant transition-colors cursor-pointer shrink-0"
+            >
+              <span class="material-symbols-outlined text-on-surface-variant text-sm">close</span>
+            </button>
+          </div>
+        </transition>
+
+        <div class="flex items-center gap-2 w-full">
+          <button
+            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-surface-container hover:bg-surface-container-highest transition-all duration-200 cursor-pointer text-sm font-medium text-on-surface shadow-sm"
+            @click="handleSelectWorkspace"
+          >
+            <span class="material-symbols-outlined text-lg shrink-0">folder_open</span>
+            <span class="truncate">é‡å­˜å´²é‚å›¦æ¬¢æ¾¶?/span>
+          </button>
+
+          <button
+            v-if="store.workspacePath && !isCreating"
+            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl transition-all duration-200 cursor-pointer text-sm font-medium shadow-sm"
+            :style="{
+              backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
+              color: store.resumeStyle.themeColor,
+            }"
+            @click="isCreating = true"
+          >
+            <span class="material-symbols-outlined text-lg shrink-0">add</span>
+            <span class="truncate">é‚æ¿ç¼“</span>
+          </button>
+        </div>
+        -->
+
+        <div
+          class="px-1 text-xs leading-5 text-on-surface-variant break-all min-h-[1.5rem]"
+          :title="store.workspacePath || undefined"
+        >
+          {{ store.workspacePath || '请选择工作文件夹' }}
+        </div>
+
+        <transition name="fade">
+          <div
+            v-if="isCreating"
+            class="flex items-center gap-2 w-full bg-surface-container px-3 py-2 rounded-xl border border-primary/20 shadow-sm"
+          >
+            <input
+              v-model="newFileName"
+              @keyup.enter="handleCreateFile"
+              @keyup.esc="isCreating = false"
+              placeholder="输入文件名..."
+              class="flex-1 bg-transparent border-none focus:outline-none text-sm text-on-surface min-w-0"
+              autofocus
+            />
+            <button
+              @click="isCreating = false"
+              class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-variant transition-colors cursor-pointer shrink-0"
+            >
+              <span class="material-symbols-outlined text-on-surface-variant text-sm">close</span>
+            </button>
+          </div>
+        </transition>
+
+        <div class="flex items-center gap-2 w-full">
+          <button
+            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-surface-container hover:bg-surface-container-highest transition-all duration-200 cursor-pointer text-sm font-medium text-on-surface shadow-sm"
+            @click="handleSelectWorkspace"
+          >
+            <span class="material-symbols-outlined text-lg shrink-0">folder_open</span>
+            <span class="truncate">更换文件夹</span>
+          </button>
+
+          <button
+            v-if="store.workspacePath && !isCreating"
+            class="flex-1 min-w-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl transition-all duration-200 cursor-pointer text-sm font-medium shadow-sm"
+            :style="{
+              backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
+              color: store.resumeStyle.themeColor,
+            }"
+            @click="isCreating = true"
+          >
+            <span class="material-symbols-outlined text-lg shrink-0">add</span>
+            <span class="truncate">新建</span>
+          </button>
+        </div>
+      </div>
     </div>
   </aside>
 </template>

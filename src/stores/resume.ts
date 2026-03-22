@@ -219,6 +219,21 @@ export const useResumeStore = defineStore("resume", () => {
     }
   };
 
+  const deletePhoto = async (path: string) => {
+    try {
+      await invoke("delete_resume", { path });
+      if (workspacePath.value) {
+        await refreshPhotoList(workspacePath.value);
+      } else if (currentPhotoPath.value === path) {
+        await loadPhoto(null);
+      }
+      ElMessage.success("证件照已删除");
+    } catch (err) {
+      console.error("Failed to delete photo:", err);
+      ElMessage.error("删除证件照失败");
+    }
+  };
+
   /** Select a workspace directory */
   const selectWorkspace = async () => {
     try {
@@ -464,6 +479,7 @@ export const useResumeStore = defineStore("resume", () => {
     refreshPhotoList,
     selectPhoto,
     importIdPhoto,
+    deletePhoto,
     photoBase64
   };
 });

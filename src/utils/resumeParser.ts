@@ -38,6 +38,19 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
+function normalizeWebsiteHref(value: string): string {
+  const trimmed = value.trim()
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  if (/^www\./i.test(trimmed)) {
+    return `https://${trimmed}`
+  }
+
+  return `https://${trimmed}`
+}
+
 function normalizeLabel(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, '')
 }
@@ -220,11 +233,22 @@ function renderContactIcon(type: ContactFieldType): string {
 
 function renderContactField(field: ContactField): string {
   const safeValue = escapeHtml(field.value)
+  let valueHtml = `<span class="contact-info-value">${safeValue}</span>`
+
+  if (field.type === 'website') {
+    const safeHref = escapeHtml(normalizeWebsiteHref(field.value))
+    valueHtml = `<a class="contact-info-value contact-info-link" href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeValue}</a>`
+  }
+
+  if (field.type === 'github') {
+    const safeHref = escapeHtml(`https://github.com/${field.value}`)
+    valueHtml = `<a class="contact-info-value contact-info-link" href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeValue}</a>`
+  }
 
   return `
     <span class="contact-info-item contact-info-item--${field.type}">
       <span class="contact-info-icon" aria-hidden="true">${renderContactIcon(field.type)}</span>
-      <span class="contact-info-value">${safeValue}</span>
+      ${valueHtml}
     </span>
   `.trim()
 }
