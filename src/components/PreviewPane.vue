@@ -6,7 +6,7 @@ import { Previewer } from 'pagedjs'
 import { useResumeStore, type ResumeStyle } from '../stores/resume'
 import { useDebounceFn } from '@vueuse/core'
 import { enhanceResumeHtml } from '../utils/resumeParser'
-import { MANUAL_PAGE_BREAK_MARKER, renderManualPageBreaks } from '../utils/manualPageBreak'
+import { renderManualPageBreaks } from '../utils/manualPageBreak'
 
 const store = useResumeStore()
 const previewContainer = ref<HTMLElement | null>(null)
@@ -41,8 +41,6 @@ const zoomIn = () => { if (zoomLevel.value < 200) zoomLevel.value += 10 }
 const zoomOut = () => { if (zoomLevel.value > 50) zoomLevel.value -= 10 }
 
 const totalPages = ref(0)
-const manualPageBreakHint = `${MANUAL_PAGE_BREAK_MARKER} 手动分页`
-
 interface PreviewRenderRequest {
   markdownText: string
   templateId: string
@@ -746,7 +744,6 @@ watch(() => store.resumeStyle, () => {
       </div>
 
       <!-- Right: Page count -->
-      <span class="text-[11px] font-mono text-on-surface-variant/60 select-none">{{ manualPageBreakHint }}</span>
       <span class="text-[11px] text-on-surface-variant/60 select-none">
         <span v-if="totalPages > 0">共 {{ totalPages }} 页</span>
         <span v-else>渲染中...</span>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { useDraggable } from 'vue-draggable-plus'
 import type { ResumeOutlineNode } from '../../utils/markdownOutline'
 
 defineOptions({
@@ -19,7 +18,8 @@ const emit = defineEmits<{
 }>()
 
 const localNodes = ref<ResumeOutlineNode[]>([])
-const containerRef = ref<HTMLElement | null>(null)
+const draggingNodeId = ref<string | null>(null)
+const dropTarget = ref<{ nodeId: string; insertAfter: boolean } | null>(null)
 
 watch(
   () => props.nodes,
@@ -54,35 +54,95 @@ const handleJump = (nodeId: string) => {
   emit('jump', nodeId)
 }
 
-useDraggable(containerRef, localNodes, {
-  animation: 180,
-  handle: '.outline-drag-handle',
-  group: {
-    name: `outline-${props.parentId ?? 'root'}`,
-    pull: false,
-    put: false,
-  },
-  ghostClass: 'outline-sortable-ghost',
-  dragClass: 'outline-sortable-drag',
-  chosenClass: 'outline-sortable-chosen',
-  onEnd(event) {
-    handleEnd(event)
-  },
-})
+const clearDragState = () => {
+  draggingNodeId.value = null
+  dropTarget.value = null
+}
+
+const handleDragStart = (nodeId: string, event: DragEvent) => {
+  draggingNodeId.value = nodeId
+  dropTarget.value = null
+
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', nodeId)
+  }
+}
+
+const handleDragOver = (targetNodeId: string, event: DragEvent) => {
+  if (!draggingNodeId.value || draggingNodeId.value === targetNodeId) {
+    return
+  }
+
+  event.preventDefault()
+
+  const currentTarget = event.currentTarget as HTMLElement | null
+  if (!currentTarget) {
+    return
+  }
+
+  const rect = currentTarget.getBoundingClientRect()
+  const insertAfter = event.clientY > rect.top + rect.height / 2
+
+  dropTarget.value = {
+    nodeId: targetNodeId,
+    insertAfter,
+  }
+}
+
+const handleDrop = (targetNodeId: string, event: DragEvent) => {
+  if (!draggingNodeId.value || draggingNodeId.value === targetNodeId) {
+    clearDragState()
+    return
+  }
+
+  event.preventDefault()
+
+  const currentIndex = localNodes.value.findIndex((node) => node.id === draggingNodeId.value)
+  const targetIndex = localNodes.value.findIndex((node) => node.id === targetNodeId)
+  if (currentIndex === -1 || targetIndex === -1) {
+    clearDragState()
+    return
+  }
+
+  const insertAfter = dropTarget.value?.nodeId === targetNodeId
+    ? dropTarget.value.insertAfter
+    : false
+
+  let nextIndex = targetIndex + (insertAfter ? 1 : 0)
+  if (currentIndex < nextIndex) {
+    nextIndex -= 1
+  }
+
+  handleEnd({
+    oldIndex: currentIndex,
+    newIndex: nextIndex,
+  })
+  clearDragState()
+}
 </script>
 
 <template>
-  <ul ref="containerRef" class="space-y-2">
+  <ul class="space-y-2">
     <li v-for="node in localNodes" :key="node.id" class="outline-sortable-item list-none space-y-2">
       <div
         class="flex items-center gap-2"
+        :class="{
+          'outline-drop-before': dropTarget?.nodeId === node.id && !dropTarget.insertAfter,
+          'outline-drop-after': dropTarget?.nodeId === node.id && dropTarget.insertAfter,
+        }"
         :style="{ paddingLeft: `${props.depth * 14}px` }"
+        @dragover="handleDragOver(node.id, $event)"
+        @drop="handleDrop(node.id, $event)"
       >
         <button
           type="button"
           class="outline-drag-handle"
+          draggable="true"
           :title="`拖动排序 ${node.title}`"
           @click.stop
+          @dragstart="handleDragStart(node.id, $event)"
+          @dragend="clearDragState"
         >
           <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
         </button>
@@ -95,6 +155,7 @@ useDraggable(containerRef, localNodes, {
             'text-[15px] font-semibold text-on-surface': node.level === 2,
             'font-medium text-on-surface': node.level === 3,
             'text-on-surface-variant': node.level === 4,
+            'opacity-60': draggingNodeId === node.id,
           }"
           @click="handleJump(node.id)"
         >

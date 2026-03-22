@@ -15,6 +15,7 @@
 .resume-document h1 {
   font-size: var(--cv-h1-size, 2rem);
   font-weight: 900;
+  line-height: 1.2;
   letter-spacing: 0.05em;
   margin-bottom: 0.5rem;
   padding-bottom: 0;
@@ -107,12 +108,14 @@
 .resume-document .job-intention {
   font-weight: bold;
   font-size: 1.05rem;
+  line-height: 1.6;
   margin-bottom: 0.5rem;
 }
 
 /* Detailed Info block */
 .resume-document .job-intention + p {
   font-size: 0.85rem;
+  line-height: 1.6;
   margin-bottom: 1.5rem;
   display: flex;
   flex-wrap: wrap;
@@ -121,6 +124,7 @@
 
 .resume-document .contact-info--icon {
   font-size: 0.85rem;
+  line-height: 1.6;
   margin-bottom: 1.5rem;
   display: flex;
   flex-wrap: wrap;
@@ -132,7 +136,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  line-height: 1.2;
+  line-height: 1.6;
 }
 
 .resume-document .contact-info-link,
