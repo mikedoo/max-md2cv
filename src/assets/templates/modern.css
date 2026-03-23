@@ -7,7 +7,7 @@
 .resume-document {
   color: #000000;
   line-height: var(--cv-line-height, 1.5);
-  font-family: var(--cv-font-family, "PingFang SC", "Microsoft YaHei", sans-serif);
+  font-family: var(--cv-font-family, "Microsoft YaHei", "PingFang SC", sans-serif);
   --cv-contact-render: icon;
   position: relative;
 }

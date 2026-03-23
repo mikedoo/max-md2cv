@@ -1,17 +1,80 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use serde::Serialize;
+use notify::{recommended_watcher, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
+use std::sync::Mutex;
+use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
+
+const RENDER_STATE_FILE_NAME: &str = ".max-md2cv.render-state.json";
 
 #[derive(Serialize, Clone)]
 pub struct TemplateInfo {
     pub id: String,
     pub name: String,
     pub css: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceChangedEvent {
+    pub workspace_path: String,
+    pub paths: Vec<String>,
+}
+
+#[derive(Default)]
+struct WorkspaceWatchState {
+    inner: Mutex<Option<WorkspaceWatcherHandle>>,
+}
+
+struct WorkspaceWatcherHandle {
+    workspace_path: String,
+    _watcher: RecommendedWatcher,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ResumeStyleState {
+    theme_color: String,
+    font_family: String,
+    font_size: f64,
+    paragraph_spacing: f64,
+    h1_size: f64,
+    h2_size: f64,
+    h3_size: f64,
+    date_size: Option<f64>,
+    date_weight: Option<String>,
+    line_height: f64,
+    margin_v: f64,
+    margin_h: f64,
+    personal_info_mode: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ResumeRenderProfile {
+    template_id: String,
+    style: ResumeStyleState,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceRenderState {
+    version: u32,
+    files: BTreeMap<String, ResumeRenderProfile>,
+}
+
+impl Default for WorkspaceRenderState {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            files: BTreeMap::new(),
+        }
+    }
 }
 
 /// Scan built-in resource templates and user-custom templates from appDataDir.
@@ -313,6 +376,31 @@ fn is_image_path(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_workspace_asset_path(path: &Path) -> bool {
+    let extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+
+    match extension.as_deref() {
+        Some("md") | Some("pdf") => true,
+        Some(ext) => is_image_extension(ext),
+        None => false,
+    }
+}
+
+fn relevant_workspace_paths(event: &Event) -> Vec<String> {
+    let mut paths = BTreeSet::new();
+
+    for path in &event.paths {
+        if is_workspace_asset_path(path) {
+            paths.insert(path.to_string_lossy().to_string());
+        }
+    }
+
+    paths.into_iter().collect()
+}
+
 fn is_id_photo_name(file_name: &str) -> bool {
     let stem = Path::new(file_name)
         .file_stem()
@@ -459,6 +547,48 @@ async fn import_id_photo(source_path: String, workspace_path: String) -> Result<
     Ok(image_entry_from_path(&target_path))
 }
 
+fn workspace_render_state_path(workspace_path: &str) -> PathBuf {
+    Path::new(workspace_path).join(RENDER_STATE_FILE_NAME)
+}
+
+#[tauri::command]
+async fn read_workspace_render_state(workspace_path: String) -> Result<WorkspaceRenderState, String> {
+    let file_path = workspace_render_state_path(&workspace_path);
+
+    if !file_path.exists() {
+        return Ok(WorkspaceRenderState::default());
+    }
+
+    let content = fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read render state {:?}: {}", file_path, e))?;
+
+    serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse render state {:?}: {}", file_path, e))
+}
+
+#[tauri::command]
+async fn write_workspace_render_state(
+    workspace_path: String,
+    state: WorkspaceRenderState,
+) -> Result<(), String> {
+    let workspace_dir = Path::new(&workspace_path);
+
+    if !workspace_dir.exists() {
+        return Err("Workspace directory does not exist".into());
+    }
+
+    if !workspace_dir.is_dir() {
+        return Err("Workspace path is not a directory".into());
+    }
+
+    let file_path = workspace_render_state_path(&workspace_path);
+    let content = serde_json::to_string_pretty(&state)
+        .map_err(|e| format!("Failed to serialize render state: {}", e))?;
+
+    fs::write(&file_path, content)
+        .map_err(|e| format!("Failed to write render state {:?}: {}", file_path, e))
+}
+
 #[tauri::command]
 async fn read_resume(path: String) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| e.to_string())
@@ -467,6 +597,11 @@ async fn read_resume(path: String) -> Result<String, String> {
 #[tauri::command]
 async fn write_resume(path: String, content: String) -> Result<(), String> {
     std::fs::write(path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn path_exists(path: String) -> Result<bool, String> {
+    Ok(Path::new(&path).exists())
 }
 
 #[tauri::command]
@@ -524,6 +659,75 @@ async fn open_directory(app: tauri::AppHandle, path: String) -> Result<(), Strin
         .map_err(|e| format!("Failed to open directory: {}", e))
 }
 
+#[tauri::command]
+async fn set_workspace_watch(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, WorkspaceWatchState>,
+    dir_path: Option<String>,
+) -> Result<(), String> {
+    let mut guard = state
+        .inner
+        .lock()
+        .map_err(|_| "Failed to lock workspace watcher state".to_string())?;
+
+    if let (Some(next_path), Some(existing)) = (dir_path.as_ref(), guard.as_ref()) {
+        if existing.workspace_path == *next_path {
+            return Ok(());
+        }
+    }
+
+    *guard = None;
+
+    let Some(dir_path) = dir_path else {
+        return Ok(());
+    };
+
+    let workspace_path = PathBuf::from(&dir_path);
+    if !workspace_path.exists() {
+        return Err("Workspace directory does not exist".into());
+    }
+
+    if !workspace_path.is_dir() {
+        return Err("Workspace path is not a directory".into());
+    }
+
+    let app_handle = app.clone();
+    let watched_workspace = dir_path.clone();
+    let mut watcher =
+        recommended_watcher(move |result: notify::Result<Event>| match result {
+            Ok(event) => {
+                let paths = relevant_workspace_paths(&event);
+                if paths.is_empty() {
+                    return;
+                }
+
+                let payload = WorkspaceChangedEvent {
+                    workspace_path: watched_workspace.clone(),
+                    paths,
+                };
+
+                if let Err(error) = app_handle.emit("workspace-changed", payload) {
+                    eprintln!("Failed to emit workspace-changed event: {}", error);
+                }
+            }
+            Err(error) => {
+                eprintln!("Workspace watcher error: {}", error);
+            }
+        })
+        .map_err(|e| format!("Failed to create workspace watcher: {}", e))?;
+
+    watcher
+        .watch(&workspace_path, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("Failed to watch workspace directory {:?}: {}", workspace_path, e))?;
+
+    *guard = Some(WorkspaceWatcherHandle {
+        workspace_path: dir_path,
+        _watcher: watcher,
+    });
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -532,6 +736,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(WorkspaceWatchState::default())
         .invoke_handler(tauri::generate_handler![
             export_pdf_command, 
             list_templates, 
@@ -541,13 +746,17 @@ pub fn run() {
             list_images,
             read_image_as_data_url,
             import_id_photo,
+            read_workspace_render_state,
             read_resume,
+            write_workspace_render_state,
             write_resume,
+            path_exists,
             delete_resume,
             rename_resume,
             duplicate_resume,
             open_pdf,
-            open_directory
+            open_directory,
+            set_workspace_watch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -120,7 +120,6 @@ const normalizeFontFamily = (fontFamily?: string | null): string => {
 
 onMounted(async () => {
   await store.loadTemplates()
-  syncDefaultsFromTemplate()
   schedulePreviewRender(store.markdownContent)
 
   if (previewContainer.value) {
@@ -179,7 +178,7 @@ const extractTopLevelProp = (block: string, prop: string): string | null => {
   }
 
   const escapedProp = prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const matches = [...flattened.matchAll(new RegExp(`${escapedProp}\\s*:\\s*([^;]+)`, 'g'))]
+  const matches = [...flattened.matchAll(new RegExp(`(?:^|[;\\s])${escapedProp}\\s*:\\s*([^;]+)`, 'g'))]
   return matches.length > 0 ? matches[matches.length - 1][1].trim() : null
 }
 
@@ -203,6 +202,19 @@ const resolveCssFallbackValue = (raw: string, fallback: string): string => {
   return inner.slice(commaIndex + 1).trim() || fallback
 }
 
+const normalizeThemeColor = (raw: string, fallback: string): string => {
+  const value = resolveCssFallbackValue(raw, fallback)
+    .replace(/\s*!important\s*$/i, '')
+    .trim()
+  const lowered = value.toLowerCase()
+
+  if (!value || ['inherit', 'initial', 'unset', 'revert', 'currentcolor', 'transparent'].includes(lowered)) {
+    return fallback
+  }
+
+  return value
+}
+
 const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
   ${pingFangFontFaceCss}
   @page {
@@ -222,6 +234,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     --cv-photo-gap: 18px;
     --cv-photo-radius: 8px;
     --cv-photo-reserve: calc(var(--cv-photo-width) + var(--cv-photo-gap));
+    --cv-theme-color: ${cvStyle.themeColor};
     --cv-font-size: ${cvStyle.fontSize}px;
     --cv-paragraph-spacing: ${cvStyle.paragraphSpacing}px;
     font-family: ${cvStyle.fontFamily} !important;
@@ -378,18 +391,12 @@ const syncDefaultsFromTemplate = () => {
   store.resumeStyle.h2Size = toNum(h2Raw, 20)
   store.resumeStyle.h3Size = toNum(h3Raw, 16)
 
-  // Theme color: try h2 color first, then h1
-  // Extract fallback from var() expressions, e.g. var(--cv-theme-color, #4c49cc) → #4c49cc
-  const parseColor = (raw: string, fallback: string): string => {
-    if (!raw) return fallback
-    const varMatch = raw.match(/var\([^,]+,\s*([^)]+)\)/)
-    if (varMatch) return varMatch[1].trim()
-    if (raw.startsWith('var(')) return fallback
-    return raw
-  }
-  const themeColorRaw = extractCssProp(css, '.resume-document h2', 'color', '')
-    || extractCssProp(css, '.resume-document h1', 'color', '#4c49cc')
-  store.resumeStyle.themeColor = parseColor(themeColorRaw, '#4c49cc')
+  const defaultThemeColor = '#4c49cc'
+  const themeColorRaw = extractCssProp(css, '.resume-document', '--cv-theme-color', '')
+    || extractCssProp(css, '.resume-document h2', 'color', '')
+    || extractCssProp(css, '.resume-document h2', 'border-left-color', '')
+    || extractCssProp(css, '.resume-document h1', 'color', defaultThemeColor)
+  store.resumeStyle.themeColor = normalizeThemeColor(themeColorRaw, defaultThemeColor)
 
   // Body font size
   const bodyFontRaw = resolveCssFallbackValue(
@@ -538,6 +545,10 @@ const debouncedRender = useDebounceFn((text: string) => {
   schedulePreviewRender(text)
 }, 500)
 
+const persistRenderState = useDebounceFn(() => {
+  void store.persistActiveFileRenderState()
+}, 400)
+
 watch(() => store.markdownContent, (newVal) => {
   debouncedRender(newVal)
 })
@@ -547,12 +558,13 @@ watch(() => store.photoBase64, () => {
 })
 
 watch(() => store.activeTemplate, () => {
-  syncDefaultsFromTemplate()
   debouncedRender(store.markdownContent)
+  persistRenderState()
 })
 
 watch(() => store.resumeStyle, () => {
   debouncedRender(store.markdownContent)
+  persistRenderState()
 }, { deep: true })
 </script>
 
@@ -570,11 +582,11 @@ watch(() => store.resumeStyle, () => {
     <!-- Preview Controls -->
     <div class="preview-toolbar flex h-16 shrink-0 items-center justify-between border-b border-outline-variant/10 bg-surface-container-high/35 px-5 backdrop-blur-sm z-10">
       <div class="flex items-center gap-2">
-        <el-dropdown trigger="click" @command="(cmd: string) => store.activeTemplate = cmd" @visible-change="(visible: boolean) => isTemplateDropdownOpen = visible">
+        <el-dropdown trigger="click" @command="(cmd: string) => store.setActiveTemplateForCurrentFile(cmd)" @visible-change="(visible: boolean) => isTemplateDropdownOpen = visible">
           <span :class="['preview-toolbar-pill', 'preview-template-trigger', 'min-w-[108px]', 'max-w-[160px]', 'cursor-pointer', 'justify-between', { 'is-open': isTemplateDropdownOpen }]">
-            <i class="bi bi-palette-fill"></i>
+            <span class="material-symbols-outlined preview-template-icon text-[16px]">palette</span>
             <span class="preview-toolbar-label">{{ store.availableTemplates.find(t => t.id === store.activeTemplate)?.name || '未知模板' }}</span>
-            <span class="material-symbols-outlined text-[16px] text-on-surface-variant/70">expand_more</span>
+            <span class="material-symbols-outlined preview-template-chevron text-[16px] text-on-surface-variant/70">expand_more</span>
           </span>
           <template #dropdown>
             <el-dropdown-menu class="min-w-[120px] rounded-xl overflow-hidden py-1 border-none shadow-ambient">
@@ -779,7 +791,7 @@ watch(() => store.resumeStyle, () => {
     </div>
     
     <!-- Scrollable Preview Area -->
-    <div ref="previewScrollContainer" class="flex flex-1 justify-center overflow-auto custom-scrollbar bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.92),_rgba(225,226,232,0.86)_52%,_rgba(236,238,243,0.92)_100%)] px-8 py-9">
+    <div ref="previewScrollContainer" class="preview-scroll-area flex flex-1 justify-center overflow-auto bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.92),_rgba(225,226,232,0.86)_52%,_rgba(236,238,243,0.92)_100%)] px-8 py-9">
       <!-- Paged.js Render Container -->
       <div ref="previewContainer" class="pagedjs-wrapper overflow-visible transition-transform duration-200" :style="{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }"></div>
     </div>
@@ -801,7 +813,7 @@ watch(() => store.resumeStyle, () => {
         confirm-button-text="确定保存"
         cancel-button-text="取消"
         confirm-button-type="primary"
-        @confirm="store.saveCurrentTemplate"
+        @confirm="store.persistActiveFileRenderState()"
         width="280"
       >
         <template #reference>
@@ -886,18 +898,20 @@ watch(() => store.resumeStyle, () => {
     0 10px 24px rgba(76, 73, 204, 0.08);
 }
 
-.preview-template-trigger:hover .bi,
-.preview-template-trigger.is-open .bi {
+.preview-template-trigger:hover .preview-template-icon,
+.preview-template-trigger.is-open .preview-template-icon {
   color: var(--color-primary);
   transform: rotate(-10deg) scale(1.03);
 }
 
-.preview-template-trigger:hover .material-symbols-outlined,
-.preview-template-trigger.is-open .material-symbols-outlined {
+.preview-template-trigger:hover .preview-template-icon,
+.preview-template-trigger.is-open .preview-template-icon,
+.preview-template-trigger:hover .preview-template-chevron,
+.preview-template-trigger.is-open .preview-template-chevron {
   color: var(--color-primary);
 }
 
-.preview-template-trigger.is-open .material-symbols-outlined {
+.preview-template-trigger.is-open .preview-template-chevron {
   transform: rotate(180deg);
 }
 
@@ -976,5 +990,33 @@ watch(() => store.resumeStyle, () => {
 .preview-toolbar-zoom button:hover {
   color: var(--color-on-surface);
   transform: scale(1.04);
+}
+
+.preview-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+}
+
+.preview-scroll-area::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.preview-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.preview-scroll-area::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-surface-variant) 18%, transparent);
+  border-radius: 999px;
+}
+
+.preview-scroll-area:hover {
+  scrollbar-color: var(--color-surface-variant) transparent;
+}
+
+.preview-scroll-area:hover::-webkit-scrollbar-thumb {
+  background: var(--color-surface-variant);
 }
 </style>

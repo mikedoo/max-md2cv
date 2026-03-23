@@ -118,17 +118,41 @@
   }
 
   .sidebar-segmented {
-    @apply inline-flex w-full rounded-full bg-surface-container p-1 shadow-sm;
+    @apply inline-flex w-full rounded-full p-1;
+    background-color: color-mix(in srgb, var(--color-surface-container) 94%, white);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--color-outline-variant) 14%, transparent),
+      0 2px 8px rgba(15, 23, 42, 0.025);
   }
 
   .sidebar-segment-button {
-    @apply flex-1 rounded-full px-4 py-2 text-sm font-semibold text-on-surface-variant transition-all duration-200;
+    @apply relative flex-1 rounded-full px-4 py-2 text-sm font-semibold text-on-surface-variant transition-all duration-200;
+  }
+
+  .sidebar-segment-button:hover {
+    color: var(--color-on-surface);
+    background-color: color-mix(in srgb, var(--sidebar-accent, var(--color-primary)) 6%, white);
+  }
+
+  .sidebar-segment-button:focus-visible {
+    outline: none;
+    color: var(--color-on-surface);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--sidebar-accent, var(--color-primary)) 18%, transparent),
+      0 0 0 3px color-mix(in srgb, var(--sidebar-accent, var(--color-primary)) 14%, transparent);
   }
 
   .sidebar-segment-button.is-active {
     background-color: var(--color-surface-container-lowest);
-    color: var(--color-primary);
-    box-shadow: 0 10px 24px rgba(76, 73, 204, 0.12);
+    color: var(--sidebar-accent, var(--color-primary));
+    box-shadow:
+      inset 0 0 0 1px color-mix(in srgb, var(--sidebar-accent, var(--color-primary)) 8%, transparent),
+      0 1px 4px rgba(15, 23, 42, 0.04);
+  }
+
+  .sidebar-segment-button.is-active:hover {
+    background-color: var(--color-surface-container-lowest);
+    color: var(--sidebar-accent, var(--color-primary));
   }
 
   .sidebar-panel-scroll {
@@ -145,6 +169,16 @@
 
   .outline-row--level2 {
     background-color: color-mix(in srgb, var(--color-primary) 8%, white);
+  }
+
+  .outline-row-title {
+    @apply min-w-0 flex-1 truncate;
+  }
+
+  .outline-row-emoji {
+    @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-xl text-sm leading-none;
+    background-color: color-mix(in srgb, var(--color-primary) 10%, white);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 8%, transparent);
   }
 
   .outline-drag-handle {

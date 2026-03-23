@@ -130,11 +130,7 @@ const handleCreateFile = async () => {
 
           <button
             v-if="store.workspacePath && !isCreating"
-            class="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium shadow-sm transition-all duration-200"
-            :style="{
-              backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
-              color: store.resumeStyle.themeColor,
-            }"
+            class="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-surface-container px-3 py-2.5 text-sm font-medium text-on-surface shadow-sm transition-all duration-200 hover:bg-surface-container-highest"
             @click="openCreateFile"
           >
             <span class="material-symbols-outlined shrink-0 text-lg">add</span>

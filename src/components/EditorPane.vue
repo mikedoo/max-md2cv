@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, basicSetup } from 'codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
@@ -10,12 +11,22 @@ import { MANUAL_PAGE_BREAK_MARKER } from '../utils/manualPageBreak'
 
 const editorContainer = ref<HTMLElement | null>(null)
 const hasCopiedMarkdown = ref(false)
+const recoveryFileName = ref('')
 const store = useResumeStore()
+
+const isMissingFile = computed(() => store.activeFileStatus === 'missing')
+const hasAlternativeFiles = computed(() => store.fileList.length > 0)
+const isFormattingDisabled = computed(
+  () => !store.activeFilePath || store.activeFileStatus === 'missing',
+)
 
 let view: EditorView | null = null
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 let isExternalUpdate = false
+
+const editableCompartment = new Compartment()
+const readOnlyCompartment = new Compartment()
 
 const markdownHighlightStyle = HighlightStyle.define([
   {
@@ -73,11 +84,34 @@ const scheduleAutoSave = () => {
   }
 
   autoSaveTimer = setTimeout(async () => {
-    if (store.activeFilePath) {
+    if (store.activeFilePath && store.activeFileStatus === 'ready') {
       await store.saveCurrentFile(true)
     }
     autoSaveTimer = null
   }, 1000)
+}
+
+const syncEditorReadOnly = () => {
+  if (!view) {
+    return
+  }
+
+  const isReadOnly = isMissingFile.value
+  view.dispatch({
+    effects: [
+      editableCompartment.reconfigure(EditorView.editable.of(!isReadOnly)),
+      readOnlyCompartment.reconfigure(EditorState.readOnly.of(isReadOnly)),
+    ],
+  })
+}
+
+const syncRecoveryFileName = () => {
+  if (!isMissingFile.value) {
+    recoveryFileName.value = ''
+    return
+  }
+
+  recoveryFileName.value = store.activeFileName || '恢复稿'
 }
 
 const focusEditor = () => {
@@ -105,7 +139,8 @@ const insertManualPageBreak = () => {
   const { state } = view
   const { from, to } = state.selection.main
   const line = state.doc.lineAt(from)
-  const isCurrentLinePageBreak = line.from !== line.to && line.text.trim() === MANUAL_PAGE_BREAK_MARKER
+  const isCurrentLinePageBreak =
+    line.from !== line.to && line.text.trim() === MANUAL_PAGE_BREAK_MARKER
 
   if (isCurrentLinePageBreak) {
     const removeFrom = Math.max(0, line.from - (line.from > 0 ? 1 : 0))
@@ -204,7 +239,8 @@ const toggleLinePrefix = (prefix: string) => {
   }
 
   const nonEmptyLines = lines.filter((line) => line.length > 0)
-  const shouldRemove = nonEmptyLines.length > 0 && nonEmptyLines.every((line) => line.startsWith(prefix))
+  const shouldRemove =
+    nonEmptyLines.length > 0 && nonEmptyLines.every((line) => line.startsWith(prefix))
   const nextBlockText = lines
     .map((line) => {
       if (!line.length) {
@@ -246,7 +282,9 @@ const toggleLinkSyntax = () => {
 
   const precedingChar = from > 0 ? state.doc.sliceString(from - 1, from) : ''
   const trailingText = state.doc.sliceString(to, Math.min(state.doc.length, to + 2048))
-  const surroundingLinkMatch = precedingChar === '[' ? trailingText.match(/^\]\(([^()]*)\)/) : null
+  const surroundingLinkMatch = precedingChar === '['
+    ? trailingText.match(/^\]\(([^()]*)\)/)
+    : null
 
   if (surroundingLinkMatch) {
     const suffixLength = surroundingLinkMatch[0].length
@@ -321,6 +359,20 @@ const copyMarkdown = async () => {
   }
 }
 
+const handleRecoverMissingFile = async () => {
+  const recovered = await store.saveMissingFileAs(recoveryFileName.value)
+  if (recovered) {
+    recoveryFileName.value = ''
+  }
+}
+
+const handleOpenOtherFile = async () => {
+  await store.openFirstAvailableFile()
+  if (store.activeFileStatus !== 'missing') {
+    recoveryFileName.value = ''
+  }
+}
+
 onMounted(() => {
   if (!editorContainer.value) return
 
@@ -330,20 +382,47 @@ onMounted(() => {
       basicSetup,
       EditorView.lineWrapping,
       markdown(),
+      editableCompartment.of(EditorView.editable.of(true)),
+      readOnlyCompartment.of(EditorState.readOnly.of(false)),
       syntaxHighlighting(markdownHighlightStyle),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) {
           return
         }
 
-        store.markdownContent = update.state.doc.toString()
-        if (!isExternalUpdate) {
-          scheduleAutoSave()
+        store.updateMarkdownContent(update.state.doc.toString(), !isExternalUpdate)
+        if (isExternalUpdate) {
+          return
         }
+
+        scheduleAutoSave()
       }),
       EditorView.theme({
         '&': { height: '100%', backgroundColor: 'transparent' },
-        '.cm-scroller': { overflow: 'auto', padding: '2rem' },
+        '.cm-scroller': {
+          overflow: 'auto',
+          padding: '2rem',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'transparent transparent',
+          scrollbarGutter: 'stable',
+        },
+        '.cm-scroller::-webkit-scrollbar': {
+          width: '6px',
+          height: '6px',
+        },
+        '.cm-scroller::-webkit-scrollbar-track': {
+          backgroundColor: 'transparent',
+        },
+        '.cm-scroller::-webkit-scrollbar-thumb': {
+          backgroundColor: 'color-mix(in srgb, var(--color-surface-variant) 18%, transparent)',
+          borderRadius: '999px',
+        },
+        '&:hover .cm-scroller, &:focus-within .cm-scroller': {
+          scrollbarColor: 'var(--color-surface-variant) transparent',
+        },
+        '&:hover .cm-scroller::-webkit-scrollbar-thumb, &:focus-within .cm-scroller::-webkit-scrollbar-thumb': {
+          backgroundColor: 'var(--color-surface-variant)',
+        },
         '.cm-content': {
           fontFamily: 'var(--font-body), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
           fontSize: '14px',
@@ -363,6 +442,9 @@ onMounted(() => {
     ],
     parent: editorContainer.value,
   })
+
+  syncEditorReadOnly()
+  syncRecoveryFileName()
 })
 
 onBeforeUnmount(async () => {
@@ -398,6 +480,14 @@ watch(() => store.markdownContent, (newVal) => {
 })
 
 watch(
+  () => store.activeFileStatus,
+  () => {
+    syncEditorReadOnly()
+    syncRecoveryFileName()
+  },
+)
+
+watch(
   () => store.editorJumpRequest?.token,
   () => {
     if (!store.editorJumpRequest) {
@@ -411,61 +501,110 @@ watch(
 </script>
 
 <template>
-  <section class="flex flex-col card-soft ghost-border shadow-ambient overflow-hidden h-full relative">
+  <section class="relative flex h-full flex-col overflow-hidden card-soft ghost-border shadow-ambient">
     <transition name="fade">
       <div
         v-if="!store.activeFilePath"
         class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-surface-container-lowest/80 backdrop-blur-sm"
       >
-        <div class="p-8 rounded-[2rem] bg-surface-container-high text-on-surface-variant/40 mb-4 ring-1 ring-outline-variant/10 shadow-inner border border-white/5">
+        <div class="mb-4 rounded-[2rem] border border-white/5 bg-surface-container-high p-8 text-on-surface-variant/40 shadow-inner ring-1 ring-outline-variant/10">
           <span class="material-symbols-outlined text-4xl">edit_note</span>
         </div>
-        <p class="text-on-surface text-sm font-semibold tracking-wide">选择或创建一个文件</p>
-        <p class="text-[11px] text-on-surface-variant/60 mt-2 font-medium">开启你的简历编辑之旅</p>
+        <p class="text-sm font-semibold tracking-wide text-on-surface">选择或创建一个文件</p>
+        <p class="mt-2 text-[11px] font-medium text-on-surface-variant/60">开始你的简历编辑</p>
+      </div>
+    </transition>
+
+    <transition name="fade">
+      <div
+        v-if="store.activeFilePath && isMissingFile"
+        class="absolute inset-0 z-40 flex items-center justify-center bg-surface-container-lowest/78 backdrop-blur-sm"
+      >
+        <div class="mx-6 w-full max-w-lg rounded-[2rem] bg-surface-container-lowest p-6 shadow-ambient">
+          <div class="flex h-14 w-14 items-center justify-center rounded-[1.5rem] bg-error/10 text-error">
+            <span class="material-symbols-outlined text-[26px]">warning</span>
+          </div>
+          <h3 class="mt-4 text-lg font-semibold text-on-surface">文件已从磁盘删除</h3>
+          <p class="mt-2 text-sm leading-6 text-on-surface-variant">
+            当前编辑内容仍保留在内存中。你可以将它另存为新文件，或者直接打开其他文件。
+          </p>
+
+          <div class="mt-5 flex flex-col gap-3">
+            <input
+              v-model="recoveryFileName"
+              class="w-full rounded-2xl bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(76,73,204,0.12)]"
+              placeholder="输入恢复文件名"
+              @keyup.enter="handleRecoverMissingFile"
+            />
+
+            <div class="flex flex-wrap gap-2">
+              <button
+                class="btn-primary !rounded-2xl !px-4 !py-2.5 text-sm"
+                :disabled="!recoveryFileName.trim()"
+                @click="handleRecoverMissingFile"
+              >
+                <span class="material-symbols-outlined text-base">save</span>
+                <span>另存为新文件</span>
+              </button>
+
+              <button
+                class="flex items-center gap-2 rounded-2xl bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-50"
+                :disabled="!hasAlternativeFiles"
+                @click="handleOpenOtherFile"
+              >
+                <span class="material-symbols-outlined text-base">folder_open</span>
+                <span>打开其他文件</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </transition>
 
     <div
-      class="h-14 border-b border-outline-variant/10 flex items-center px-6 justify-between bg-surface-container-lowest/50 backdrop-blur-sm shrink-0 transition-all duration-300"
-      :class="{ 'opacity-20 grayscale pointer-events-none': !store.activeFilePath }"
+      class="flex h-14 items-center justify-between border-b border-outline-variant/10 bg-surface-container-lowest/50 px-6 backdrop-blur-sm transition-all duration-300 shrink-0"
+      :class="{ 'pointer-events-none opacity-20 grayscale': !store.activeFilePath }"
     >
-      <div class="flex items-center gap-3">
-        <button @click="toggleInlineSyntax('**')" class="p-2 hover:bg-surface-container-low rounded-lg text-on-surface-variant transition-colors group" title="加粗">
-          <span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">format_bold</span>
+      <div
+        class="flex items-center gap-3 transition-opacity"
+        :class="{ 'pointer-events-none opacity-45': isFormattingDisabled }"
+      >
+        <button @click="toggleInlineSyntax('**')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="加粗">
+          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_bold</span>
         </button>
-        <button @click="toggleInlineSyntax('*')" class="p-2 hover:bg-surface-container-low rounded-lg text-on-surface-variant transition-colors group" title="斜体">
-          <span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">format_italic</span>
+        <button @click="toggleInlineSyntax('*')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="斜体">
+          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_italic</span>
         </button>
-        <button @click="toggleLinePrefix('- ')" class="p-2 hover:bg-surface-container-low rounded-lg text-on-surface-variant transition-colors group" title="列表">
-          <span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">format_list_bulleted</span>
+        <button @click="toggleLinePrefix('- ')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="列表">
+          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_list_bulleted</span>
         </button>
-        <button @click="toggleLinkSyntax" class="p-2 hover:bg-surface-container-low rounded-lg text-on-surface-variant transition-colors group" title="链接">
-          <span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">link</span>
+        <button @click="toggleLinkSyntax" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="链接">
+          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">link</span>
         </button>
-        <button @click="insertManualPageBreak" class="p-2 hover:bg-surface-container-low rounded-lg text-on-surface-variant transition-colors group" :title="`插入分页 ${MANUAL_PAGE_BREAK_MARKER}`">
-          <span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">insert_page_break</span>
+        <button @click="insertManualPageBreak" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" :title="`插入分页 ${MANUAL_PAGE_BREAK_MARKER}`">
+          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">insert_page_break</span>
         </button>
-        <button @click="toggleLinePrefix('> ')" class="p-2 hover:bg-surface-container-low rounded-lg text-on-surface-variant transition-colors group" title="引用">
-          <span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">format_quote</span>
+        <button @click="toggleLinePrefix('> ')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="引用">
+          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_quote</span>
         </button>
       </div>
 
       <button
         @click="copyMarkdown"
-        class="p-2 hover:bg-surface-container-low rounded-lg text-on-surface-variant transition-colors group"
+        class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low"
         :title="hasCopiedMarkdown ? '已复制 Markdown 文本' : '复制 Markdown 文本'"
       >
-        <span class="material-symbols-outlined text-xl group-hover:scale-110 transition-transform">
+        <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">
           {{ hasCopiedMarkdown ? 'check' : 'content_copy' }}
         </span>
       </button>
     </div>
 
     <div
-      class="flex-1 w-full bg-transparent overflow-hidden transition-opacity duration-300"
+      class="flex-1 w-full overflow-hidden bg-transparent transition-opacity duration-300"
       :class="{ 'opacity-0': !store.activeFilePath }"
     >
-      <div ref="editorContainer" class="h-full w-full custom-scrollbar"></div>
+      <div ref="editorContainer" class="custom-scrollbar h-full w-full"></div>
     </div>
   </section>
 </template>

@@ -149,7 +149,7 @@ const confirmDelete = async () => {
             <li v-for="file in store.fileList" :key="file.path" class="group relative">
               <el-dropdown trigger="contextmenu" @command="handleContextMenu" class="!block w-full overflow-hidden">
                 <div
-                  class="flex cursor-pointer items-center overflow-hidden rounded-2xl px-4 py-3 transition-all duration-200"
+                  class="flex cursor-pointer items-center overflow-hidden rounded-2xl px-4 py-2.5 transition-all duration-200"
                   :class="store.activeFilePath === file.path ? 'font-medium' : 'text-on-surface hover:bg-surface-container-highest'"
                   :style="
                     store.activeFilePath === file.path
@@ -162,6 +162,15 @@ const confirmDelete = async () => {
                   @click="handleFileClick(file.path)"
                   @dblclick="startRename(file)"
                 >
+                  <span
+                    class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center"
+                    :style="{
+                      color: '#2563eb',
+                    }"
+                  >
+                    <span class="material-symbols-outlined text-[20px]">description</span>
+                  </span>
+
                   <div class="mr-2 min-w-0 flex-1 overflow-hidden">
                     <input
                       v-if="editingFilePath === file.path"
@@ -173,7 +182,11 @@ const confirmDelete = async () => {
                       @blur="finishRename"
                       @click.stop
                     />
-                    <span v-else class="block truncate text-sm font-medium leading-none select-none">
+                    <span
+                      v-else
+                      class="block truncate text-sm font-medium leading-none select-none"
+                      :title="file.name.replace(/\.md$/, '')"
+                    >
                       {{ file.name.replace(/\.md$/, '') }}
                     </span>
                   </div>
@@ -250,7 +263,6 @@ const confirmDelete = async () => {
             <li v-for="file in store.pdfFileList" :key="file.path" class="group relative">
               <div
                 class="flex items-center gap-3 rounded-2xl px-4 py-3 text-on-surface transition-colors duration-200 hover:bg-surface-container-highest/60"
-                :title="file.path"
               >
                 <button
                   class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left transition-colors duration-200 hover:text-primary"
@@ -258,7 +270,7 @@ const confirmDelete = async () => {
                 >
                   <span class="material-symbols-outlined shrink-0 text-[20px] text-[#dc2626]">picture_as_pdf</span>
                   <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-medium">{{ file.name }}</p>
+                    <p class="truncate text-sm font-medium" :title="file.name">{{ file.name }}</p>
                   </div>
                 </button>
 
@@ -326,7 +338,7 @@ const confirmDelete = async () => {
               </div>
 
               <div v-if="store.currentPhotoPath" class="mt-3 flex items-center gap-2">
-                <p class="min-w-0 flex-1 truncate text-sm font-medium text-on-surface">
+                <p class="min-w-0 flex-1 truncate text-sm font-medium text-on-surface" :title="currentPhotoName">
                   {{ currentPhotoName }}
                 </p>
 
@@ -420,4 +432,5 @@ const confirmDelete = async () => {
 .library-tabs :deep(.el-tab-pane) {
   height: 100%;
 }
+
 </style>
