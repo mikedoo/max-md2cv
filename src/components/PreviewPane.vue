@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import { marked } from 'marked'
 import { Previewer } from 'pagedjs'
 import { useResumeStore, type ResumeStyle } from '../stores/resume'
@@ -8,35 +7,14 @@ import { useDebounceFn } from '@vueuse/core'
 import { enhanceResumeHtml } from '../utils/resumeParser'
 import { renderManualPageBreaks } from '../utils/manualPageBreak'
 import { pingFangFontFaceCss } from '../utils/fontAssets'
+import PreviewToolbar from './preview/PreviewToolbar.vue'
 
 const store = useResumeStore()
 const previewContainer = ref<HTMLElement | null>(null)
 const previewScrollContainer = ref<HTMLElement | null>(null)
-const isTemplateDropdownOpen = ref(false)
 let paged: any = null
 let activeRenderPromise: Promise<void> | null = null
 let pendingRenderRequest: PreviewRenderRequest | null = null
-
-const photoInput = ref<HTMLInputElement | null>(null)
-
-const handlePhotoUpload = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
-
-  if (file.size > 1024 * 1024) {
-    ElMessage.error('照片大小不能超过 1MB')
-    target.value = ''
-    return
-  }
-
-  const reader = new FileReader()
-  reader.onload = (evt) => {
-    store.photoBase64 = evt.target?.result as string
-    target.value = ''
-  }
-  reader.readAsDataURL(file)
-}
 
 const zoomLevel = ref(100)
 const zoomIn = () => { if (zoomLevel.value < 200) zoomLevel.value += 10 }
@@ -72,52 +50,6 @@ const createPreviewStagingContainer = () => {
   return stagingContainer
 }
 
-// ─── Resume Fonts ────────────────────────────────────────────────────────────
-// Fixed set of common Chinese and English resume fonts
-const FONT_OPTIONS = [
-  { label: '苹方', value: '"PingFang SC", "Microsoft YaHei", sans-serif' },
-  { label: '微软雅黑', value: '"Microsoft YaHei", "PingFang SC", sans-serif' },
-  { label: '黑体', value: '"SimHei", "Microsoft YaHei", sans-serif' },
-  { label: '宋体', value: '"SimSun", "Times New Roman", serif' },
-  { label: 'Helvetica', value: 'Helvetica, Arial, sans-serif' },
-  { label: 'Arial', value: 'Arial, sans-serif' },
-  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
-] as const
-
-const DEFAULT_FONT_FAMILY = FONT_OPTIONS[0].value
-
-const normalizeFontFamily = (fontFamily?: string | null): string => {
-  const resolvedFontFamily = (fontFamily ?? '')
-    .replace(/^var\(\s*--[^,]+,\s*(.+)\)$/, '$1')
-
-  const primaryFont = resolvedFontFamily
-    .split(',')[0]
-    ?.replace(/["']/g, '')
-    .trim()
-    .toLowerCase()
-
-  switch (primaryFont) {
-    case 'pingfang sc':
-      return FONT_OPTIONS[0].value
-    case 'microsoft yahei':
-      return FONT_OPTIONS[1].value
-    case 'simhei':
-      return FONT_OPTIONS[2].value
-    case 'simsun':
-      return FONT_OPTIONS[3].value
-    case 'helvetica':
-    case 'helvetica neue':
-      return FONT_OPTIONS[4].value
-    case 'arial':
-    case 'arial narrow':
-      return FONT_OPTIONS[5].value
-    case 'times new roman':
-      return FONT_OPTIONS[6].value
-    default:
-      return DEFAULT_FONT_FAMILY
-  }
-}
-
 onMounted(async () => {
   await store.loadTemplates()
   schedulePreviewRender(store.markdownContent)
@@ -131,90 +63,8 @@ onMounted(async () => {
     })
   }
 })
-
-// ─── CSS Parsing ──────────────────────────────────────────────────────────────
-const getCssBlocks = (css: string, selector: string): string[] => {
-  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const selectorRe = new RegExp(`${escapedSelector}\\s*\\{`, 'g')
-  const blocks: string[] = []
-
-  while (selectorRe.exec(css) !== null) {
-    const blockStart = selectorRe.lastIndex - 1
-    let depth = 1
-    let cursor = blockStart + 1
-
-    while (cursor < css.length && depth > 0) {
-      const char = css[cursor]
-      if (char === '{') depth += 1
-      if (char === '}') depth -= 1
-      cursor += 1
-    }
-
-    if (depth !== 0) break
-
-    blocks.push(css.slice(blockStart + 1, cursor - 1))
-    selectorRe.lastIndex = cursor
-  }
-
-  return blocks
-}
-
-const extractTopLevelProp = (block: string, prop: string): string | null => {
-  let depth = 0
-  let flattened = ''
-
-  for (const char of block) {
-    if (char === '{') {
-      depth += 1
-      continue
-    }
-    if (char === '}') {
-      depth = Math.max(0, depth - 1)
-      continue
-    }
-    if (depth === 0) {
-      flattened += char
-    }
-  }
-
-  const escapedProp = prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const matches = [...flattened.matchAll(new RegExp(`(?:^|[;\\s])${escapedProp}\\s*:\\s*([^;]+)`, 'g'))]
-  return matches.length > 0 ? matches[matches.length - 1][1].trim() : null
-}
-
-const extractCssProp = (css: string, selector: string, prop: string, fallback: string): string => {
-  const blocks = getCssBlocks(css, selector)
-  for (let i = blocks.length - 1; i >= 0; i -= 1) {
-    const value = extractTopLevelProp(blocks[i], prop)
-    if (value) return value
-  }
-  return fallback
-}
-
-const resolveCssFallbackValue = (raw: string, fallback: string): string => {
-  const value = raw.trim()
-  if (!value.startsWith('var(')) return value
-
-  const inner = value.slice(4, -1)
-  const commaIndex = inner.indexOf(',')
-  if (commaIndex === -1) return fallback
-
-  return inner.slice(commaIndex + 1).trim() || fallback
-}
-
-const normalizeThemeColor = (raw: string, fallback: string): string => {
-  const value = resolveCssFallbackValue(raw, fallback)
-    .replace(/\s*!important\s*$/i, '')
-    .trim()
-  const lowered = value.toLowerCase()
-
-  if (!value || ['inherit', 'initial', 'unset', 'revert', 'currentcolor', 'transparent'].includes(lowered)) {
-    return fallback
-  }
-
-  return value
-}
-
+// ─── Resume Fonts ────────────────────────────────────────────────────────────
+// Fixed set of common Chinese and English resume fonts
 const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
   ${pingFangFontFaceCss}
   @page {
@@ -357,89 +207,6 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
   }
 `
 
-const syncDefaultsFromTemplate = () => {
-  const tpl = store.availableTemplates.find(t => t.id === store.activeTemplate)
-  const css = tpl?.css ?? ''
-
-  const lineHeightRaw = resolveCssFallbackValue(
-    extractCssProp(css, '.resume-document', 'line-height', '1.6'),
-    '1.6'
-  )
-  const lineHeight = parseFloat(lineHeightRaw)
-
-  const fontFamily = normalizeFontFamily(
-    extractCssProp(css, '.resume-document', 'font-family', DEFAULT_FONT_FAMILY)
-  )
-
-  // Parse heading sizes from the template
-  const h1Raw = extractCssProp(css, '.resume-document h1', 'font-size', '28px')
-  const h2Raw = extractCssProp(css, '.resume-document h2', 'font-size', '20px')
-  const h3Raw = extractCssProp(css, '.resume-document h3', 'font-size', '16px')
-
-  // Convert rem → px (assume 16px base) or strip px
-  const toNum = (v: string, fallback: number) => {
-    const rem = v.match(/([\d.]+)rem/)
-    if (rem) return parseFloat(rem[1]) * 16
-    const px = v.match(/([\d.]+)px/)
-    if (px) return parseFloat(px[1])
-    return fallback
-  }
-
-  store.resumeStyle.lineHeight = isNaN(lineHeight) ? 1.6 : lineHeight
-  store.resumeStyle.fontFamily = fontFamily
-  store.resumeStyle.h1Size = toNum(h1Raw, 28)
-  store.resumeStyle.h2Size = toNum(h2Raw, 20)
-  store.resumeStyle.h3Size = toNum(h3Raw, 16)
-
-  const defaultThemeColor = '#4c49cc'
-  const themeColorRaw = extractCssProp(css, '.resume-document', '--cv-theme-color', '')
-    || extractCssProp(css, '.resume-document h2', 'color', '')
-    || extractCssProp(css, '.resume-document h2', 'border-left-color', '')
-    || extractCssProp(css, '.resume-document h1', 'color', defaultThemeColor)
-  store.resumeStyle.themeColor = normalizeThemeColor(themeColorRaw, defaultThemeColor)
-
-  // Body font size
-  const bodyFontRaw = resolveCssFallbackValue(
-    extractCssProp(
-      css,
-      '.resume-document',
-      '--cv-font-size',
-      extractCssProp(css, '.resume-document p', 'font-size', extractCssProp(css, '.resume-document', 'font-size', '14px'))
-    ),
-    '14px'
-  )
-  store.resumeStyle.fontSize = toNum(bodyFontRaw, 14)
-
-  const dateWeightRaw = resolveCssFallbackValue(
-    extractCssProp(
-      css,
-      '.resume-document .experience-date',
-      'font-weight',
-      extractCssProp(css, '.resume-document', '--cv-date-weight', '400')
-    ),
-    '400'
-  ).toLowerCase()
-  store.resumeStyle.dateWeight = ['bold', 'bolder', '700', '800', '900'].includes(dateWeightRaw) ? '700' : '400'
-
-  const paragraphSpacingRaw = extractCssProp(
-    css,
-    '.resume-document',
-    '--cv-paragraph-spacing',
-    extractCssProp(css, '.resume-document p', 'margin-bottom', '0.5rem')
-  )
-  store.resumeStyle.paragraphSpacing = toNum(paragraphSpacingRaw, 8)
-
-  // Page margins from @page rule
-  const pageMarginRaw = extractCssProp(css, '@page', 'margin', '10mm 12mm')
-  const marginParts = pageMarginRaw.match(/([\d.]+)/g) ?? []
-  store.resumeStyle.marginV = marginParts.length >= 1 ? parseFloat(marginParts[0] as string) : 10
-  store.resumeStyle.marginH = marginParts.length >= 2 ? parseFloat(marginParts[1] as string) : 12
-
-  const contactRenderMode = extractCssProp(css, '.resume-document', '--cv-contact-render', 'text')
-  store.resumeStyle.personalInfoMode = contactRenderMode === 'icon' ? 'icon' : 'text'
-}
-
-// ─── Render ───────────────────────────────────────────────────────────────────
 const createPreviewRenderRequest = (markdownText: string): PreviewRenderRequest => {
   const activeTemplateData = store.availableTemplates.find(t => t.id === store.activeTemplate)
 
@@ -570,226 +337,9 @@ watch(() => store.resumeStyle, () => {
 
 <template>
   <section class="flex flex-col card-soft ghost-border shadow-ambient overflow-hidden relative">
-    <!-- Hidden file input for photo upload -->
-    <input 
-      type="file" 
-      ref="photoInput" 
-      accept="image/*" 
-      class="hidden" 
-      @change="handlePhotoUpload" 
-    />
-
     <!-- Preview Controls -->
-    <div class="preview-toolbar flex h-16 shrink-0 items-center justify-between border-b border-outline-variant/10 bg-surface-container-high/35 px-5 backdrop-blur-sm z-10">
-      <div class="flex items-center gap-2">
-        <el-dropdown trigger="click" @command="(cmd: string) => store.setActiveTemplateForCurrentFile(cmd)" @visible-change="(visible: boolean) => isTemplateDropdownOpen = visible">
-          <span :class="['preview-toolbar-pill', 'preview-template-trigger', 'min-w-[108px]', 'max-w-[160px]', 'cursor-pointer', 'justify-between', { 'is-open': isTemplateDropdownOpen }]">
-            <span class="material-symbols-outlined preview-template-icon text-[16px]">palette</span>
-            <span class="preview-toolbar-label">{{ store.availableTemplates.find(t => t.id === store.activeTemplate)?.name || '未知模板' }}</span>
-            <span class="material-symbols-outlined preview-template-chevron text-[16px] text-on-surface-variant/70">expand_more</span>
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu class="min-w-[120px] rounded-xl overflow-hidden py-1 border-none shadow-ambient">
-              <el-dropdown-item 
-                v-for="tpl in store.availableTemplates" 
-                :key="tpl.id" 
-                :command="tpl.id"
-                :class="{ 'text-primary font-bold bg-primary/5': store.activeTemplate === tpl.id }"
-              >
-                {{ tpl.name }}
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
+    <PreviewToolbar :zoom-level="zoomLevel" @zoom-in="zoomIn" @zoom-out="zoomOut" />
 
-      <!-- Style Controls -->
-      <div class="preview-toolbar-center flex flex-1 items-center justify-center gap-3">
-        <!-- Font Selection -->
-        <el-select v-model="store.resumeStyle.fontFamily" size="small" style="width: 108px" placeholder="字体">
-          <el-option
-            v-for="f in FONT_OPTIONS"
-            :key="f.value"
-            :label="f.label"
-            :value="f.value"
-          />
-        </el-select>
-
-        <!-- Custom Theme Color Picker (Replaces el-color-picker) -->
-        <el-popover placement="bottom" trigger="click" :width="240">
-          <template #reference>
-            <div class="preview-toolbar-icon cursor-pointer" title="主题色">
-              <div 
-                class="w-4 h-4 rounded-full border border-outline-variant/50 shadow-inner"
-                :style="{ backgroundColor: store.resumeStyle.themeColor }"
-              ></div>
-            </div>
-          </template>
-
-          <div class="flex flex-col gap-3 font-sans">
-            <div class="text-xs font-bold text-on-surface-variant flex justify-between items-center">
-              <span>选择颜色</span>
-            </div>
-            
-            <!-- Predefined Colors -->
-            <div class="grid grid-cols-5 gap-2">
-              <div 
-                v-for="color in ['#4c49cc', '#ef4444', '#10b981', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#000000', '#333333']" 
-                :key="color"
-                @click="store.resumeStyle.themeColor = color"
-                class="w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center transition-transform hover:scale-110 shadow-sm border border-outline-variant/20"
-                :style="{ backgroundColor: color }"
-              >
-                <span v-if="store.resumeStyle.themeColor.toLowerCase() === color.toLowerCase()" class="material-symbols-outlined text-white text-[16px] drop-shadow-md">check</span>
-              </div>
-            </div>
-            
-            <div class="h-[1px] w-full bg-outline-variant/20 my-1"></div>
-            
-            <!-- Custom Color & Hex -->
-            <div class="flex items-center gap-3">
-              <div class="relative w-8 h-8 rounded-lg overflow-hidden border border-outline-variant/30 shadow-sm cursor-pointer flex-shrink-0">
-                <div class="absolute inset-0 z-0" :style="{ backgroundColor: store.resumeStyle.themeColor }"></div>
-                <!-- Eyedropper Icon -->
-                <span class="material-symbols-outlined absolute inset-0 w-5 h-5 m-auto z-10 text-white/80 drop-shadow flex items-center justify-center text-[18px] pointer-events-none">colorize</span>
-                <input 
-                  type="color" 
-                  v-model="store.resumeStyle.themeColor"
-                  class="absolute inset-[-10px] w-12 h-12 opacity-0 cursor-pointer z-20"
-                />
-              </div>
-              
-              <div class="flex-1 px-3 py-1.5 bg-surface-container rounded-md border border-outline-variant/30 flex items-center">
-                <span class="text-on-surface-variant/50 text-xs font-mono mr-1">#</span>
-                <input 
-                  type="text" 
-                  :value="store.resumeStyle.themeColor.replace('#', '')"
-                  @input="(e) => { const v = (e.target as HTMLInputElement).value; if(/^[0-9A-Fa-f]{6}$/.test(v)) store.resumeStyle.themeColor = '#' + v }"
-                  class="bg-transparent border-none outline-none text-xs text-on-surface-variant w-full font-mono uppercase"
-                  maxlength="6"
-                />
-              </div>
-            </div>
-          </div>
-        </el-popover>
-
-        <!-- Font Size Dropdown -->
-        <el-dropdown trigger="click" :hide-on-click="false">
-          <button class="preview-toolbar-icon cursor-pointer" title="字号">
-            <span class="material-symbols-outlined text-[14px]">format_size</span>
-          </button>
-          <template #dropdown>
-            <div class="p-4 w-64 font-sans shadow-ambient rounded-xl">
-              <!-- H1 -->
-              <div class="text-xs font-bold text-on-surface-variant mb-2 flex justify-between">
-                <span>H1 标题大小</span>
-                <span class="text-primary">{{ Math.round(store.resumeStyle.h1Size) }}px</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.h1Size" :min="24" :max="34" :step="1" :show-tooltip="false" />
-
-              <!-- H2 -->
-              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2 flex justify-between">
-                <span>H2 标题大小</span>
-                <span class="text-primary">{{ Math.round(store.resumeStyle.h2Size) }}px</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.h2Size" :min="14" :max="22" :step="1" :show-tooltip="false" />
-
-              <!-- H3 -->
-              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2 flex justify-between">
-                <span>H3 标题大小</span>
-                <span class="text-primary">{{ Math.round(store.resumeStyle.h3Size) }}px</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.h3Size" :min="12" :max="18" :step="1" :show-tooltip="false" />
-
-              <!-- Body -->
-              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2 flex justify-between">
-                <span>正文大小</span>
-                <span class="text-primary">{{ store.resumeStyle.fontSize }}px</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.fontSize" :min="11" :max="16" :step="1" :show-tooltip="false" />
-              
-              <div class="h-[1px] w-full bg-outline-variant/20 my-4"></div>
-
-              <!-- Date customization -->
-              <div class="text-xs font-bold text-on-surface-variant mb-2 flex justify-between">
-                <span>日期大小</span>
-                <span class="text-primary">{{ store.resumeStyle.dateSize }}px</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.dateSize" :min="11" :max="16" :step="1" :show-tooltip="false" />
-              
-              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2">日期粗细</div>
-              <div class="flex items-center gap-2 rounded-full bg-surface-container p-1">
-                <button
-                  type="button"
-                  class="flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors"
-                  :class="store.resumeStyle.dateWeight === '400'
-                    ? 'bg-surface-container-lowest text-on-surface shadow-sm'
-                    : 'text-on-surface-variant hover:text-on-surface'"
-                  @click="store.resumeStyle.dateWeight = '400'"
-                >
-                  不加粗
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors"
-                  :class="store.resumeStyle.dateWeight === '700'
-                    ? 'bg-surface-container-lowest text-primary shadow-sm'
-                    : 'text-on-surface-variant hover:text-on-surface'"
-                  @click="store.resumeStyle.dateWeight = '700'"
-                >
-                  加粗
-                </button>
-              </div>
-            </div>
-          </template>
-        </el-dropdown>
-
-        <!-- Spacing Dropdown -->
-        <el-dropdown trigger="click" :hide-on-click="false">
-          <button class="preview-toolbar-icon cursor-pointer" title="间距">
-            <span class="material-symbols-outlined text-[14px]">format_line_spacing</span>
-          </button>
-          <template #dropdown>
-            <div class="p-4 w-60 font-sans shadow-ambient rounded-xl">
-              <div class="text-xs font-bold text-on-surface-variant mb-2 flex justify-between">
-                <span>行距</span>
-                <span class="text-primary">{{ store.resumeStyle.lineHeight }}</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.lineHeight" :min="1.0" :max="2.5" :step="0.1" :show-tooltip="false" />
-
-              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2 flex justify-between">
-                <span>段落间距</span>
-                <span class="text-primary">{{ store.resumeStyle.paragraphSpacing }}px</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.paragraphSpacing" :min="0" :max="24" :step="1" :show-tooltip="false" />
-              
-              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2 flex justify-between">
-                <span>上下页边距</span>
-                <span class="text-primary">{{ store.resumeStyle.marginV }}mm</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.marginV" :min="0" :max="50" :step="1" :show-tooltip="false" />
-
-              <div class="text-xs font-bold text-on-surface-variant mt-4 mb-2 flex justify-between">
-                <span>左右页边距</span>
-                <span class="text-primary">{{ store.resumeStyle.marginH }}mm</span>
-              </div>
-              <el-slider v-model="store.resumeStyle.marginH" :min="0" :max="50" :step="1" :show-tooltip="false" />
-            </div>
-          </template>
-        </el-dropdown>
-      </div>
-      
-      <div class="preview-toolbar-group preview-toolbar-zoom">
-        <button @click="zoomOut" class="text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="缩小">
-          <span class="material-symbols-outlined text-base">remove_circle_outline</span>
-        </button>
-        <span class="text-[11px] font-bold text-on-surface-variant w-9 text-center select-none">{{ zoomLevel }}%</span>
-        <button @click="zoomIn" class="text-on-surface-variant transition-colors flex items-center justify-center cursor-pointer" title="放大">
-          <span class="material-symbols-outlined text-base">add_circle_outline</span>
-        </button>
-      </div>
-    </div>
-    
     <!-- Scrollable Preview Area -->
     <div ref="previewScrollContainer" class="preview-scroll-area flex flex-1 justify-center overflow-auto bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.92),_rgba(225,226,232,0.86)_52%,_rgba(236,238,243,0.92)_100%)] px-8 py-9">
       <!-- Paged.js Render Container -->
@@ -801,7 +351,7 @@ watch(() => store.resumeStyle, () => {
       <!-- Left: Reset + Save -->
       <div class="flex items-center gap-3">
         <button
-          @click="syncDefaultsFromTemplate"
+          @click="store.resetActiveFileRenderSettings()"
           class="text-xs flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
           title="恢复模板默认属性"
         >
@@ -866,132 +416,6 @@ watch(() => store.resumeStyle, () => {
 </style>
 
 <style scoped>
-.preview-template-trigger {
-  gap: 0.5rem;
-  padding-inline: 0.875rem 0.75rem;
-  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-}
-
-.preview-template-trigger .preview-toolbar-label {
-  min-width: 0;
-  flex: 1;
-}
-
-.preview-template-trigger .bi {
-  font-size: 0.875rem;
-  color: color-mix(in srgb, var(--color-primary) 78%, white);
-  transition: transform 0.2s ease, color 0.2s ease;
-}
-
-.preview-template-trigger .material-symbols-outlined {
-  flex-shrink: 0;
-  transition: transform 0.2s ease, color 0.2s ease;
-}
-
-.preview-template-trigger:hover,
-.preview-template-trigger.is-open {
-  transform: translateY(-1px);
-  color: var(--color-on-surface);
-  background-color: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-container-lowest));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 16%, transparent),
-    0 10px 24px rgba(76, 73, 204, 0.08);
-}
-
-.preview-template-trigger:hover .preview-template-icon,
-.preview-template-trigger.is-open .preview-template-icon {
-  color: var(--color-primary);
-  transform: rotate(-10deg) scale(1.03);
-}
-
-.preview-template-trigger:hover .preview-template-icon,
-.preview-template-trigger.is-open .preview-template-icon,
-.preview-template-trigger:hover .preview-template-chevron,
-.preview-template-trigger.is-open .preview-template-chevron {
-  color: var(--color-primary);
-}
-
-.preview-template-trigger.is-open .preview-template-chevron {
-  transform: rotate(180deg);
-}
-
-.preview-toolbar-center {
-  gap: 0.625rem;
-}
-
-.preview-toolbar-center :deep(.el-select) {
-  width: 108px !important;
-}
-
-.preview-toolbar-center :deep(.el-select .el-select__wrapper) {
-  min-height: 2.25rem;
-  border-radius: 999px;
-  padding-inline: 0.75rem 0.625rem;
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 92%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-outline-variant) 22%, transparent);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-}
-
-.preview-toolbar-center :deep(.el-select:hover .el-select__wrapper),
-.preview-toolbar-center :deep(.el-select.is-focus .el-select__wrapper) {
-  background-color: var(--color-surface-container-high);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 20%, transparent);
-}
-
-.preview-toolbar-center :deep(.el-select .el-select__selected-item),
-.preview-toolbar-center :deep(.el-select .el-select__placeholder) {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-on-surface-variant);
-}
-
-.preview-toolbar-center :deep(.el-select .el-select__caret) {
-  font-size: 1rem;
-  color: color-mix(in srgb, var(--color-on-surface-variant) 72%, white);
-}
-
-.preview-toolbar-center :deep(button),
-.preview-toolbar-center > div[title] {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 999px;
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 92%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-outline-variant) 22%, transparent);
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-.preview-toolbar-center :deep(button:hover),
-.preview-toolbar-center > div[title]:hover {
-  background-color: var(--color-surface-container-high);
-  color: var(--color-on-surface);
-}
-
-.preview-toolbar-zoom {
-  height: 2.25rem;
-  padding-block: 0;
-  padding-inline: 0.75rem;
-  gap: 0.625rem;
-}
-
-.preview-toolbar-zoom button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: auto;
-  height: auto;
-  background: transparent;
-  box-shadow: none;
-  transition: color 0.2s ease, transform 0.2s ease;
-}
-
-.preview-toolbar-zoom button:hover {
-  color: var(--color-on-surface);
-  transform: scale(1.04);
-}
-
 .preview-scroll-area {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
