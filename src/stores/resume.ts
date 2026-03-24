@@ -1055,7 +1055,7 @@ export const useResumeStore = defineStore("resume", () => {
       await deleteRenderProfile(path);
 
       if (!workspacePath.value) {
-        ElMessage.success("文件已删除");
+        ElMessage.success("文件移至回收站");
         return;
       }
 
@@ -1069,7 +1069,7 @@ export const useResumeStore = defineStore("resume", () => {
         await openDefaultFile(files);
       }
 
-      ElMessage.success("文件已删除");
+      ElMessage.success("文件已移至回收站");
     } catch (error) {
       console.error("Failed to delete file:", error);
       ElMessage.error("删除文件失败");

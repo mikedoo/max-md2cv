@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { invoke } from '@tauri-apps/api/core'
 import { useResumeStore } from '../../stores/resume'
 import type { FileItem } from '../../stores/resume'
 
 const store = useResumeStore()
+const RENAME_IME_GUARD_MS = 180
 
 const activeTab = ref<'resume' | 'pdf' | 'photo'>('resume')
 const editingFilePath = ref<string | null>(null)
 const editingFileName = ref('')
+const isRenameComposing = ref(false)
+const renameImeGuardUntil = ref(0)
 const editInputRefs = ref<Record<string, HTMLInputElement | null>>({})
 const deleteDialogVisible = ref(false)
 const fileToDelete = ref<FileItem | null>(null)
@@ -47,12 +50,18 @@ const handlePhotoDelete = async () => {
 const startRename = async (file: FileItem) => {
   editingFilePath.value = file.path
   editingFileName.value = file.name.replace(/\.md$/, '')
+  isRenameComposing.value = false
+  renameImeGuardUntil.value = 0
   await nextTick()
   editInputRefs.value[file.path]?.focus()
 }
 
-const finishRename = async () => {
+const finishRename = async (options: { force?: boolean } = {}) => {
   if (!editingFilePath.value) {
+    return
+  }
+
+  if (isRenameComposing.value && !options.force) {
     return
   }
 
@@ -61,6 +70,8 @@ const finishRename = async () => {
 
   editingFilePath.value = null
   editingFileName.value = ''
+  isRenameComposing.value = false
+  renameImeGuardUntil.value = 0
 
   if (newName) {
     await store.renameFile(oldPath, newName)
@@ -70,7 +81,79 @@ const finishRename = async () => {
 const cancelRename = () => {
   editingFilePath.value = null
   editingFileName.value = ''
+  isRenameComposing.value = false
+  renameImeGuardUntil.value = 0
 }
+
+const markRenameImeGuard = () => {
+  renameImeGuardUntil.value = Date.now() + RENAME_IME_GUARD_MS
+}
+
+const isRenameImeActive = () => isRenameComposing.value || Date.now() < renameImeGuardUntil.value
+
+const handleRenameInput = (event: Event) => {
+  editingFileName.value = (event.target as HTMLInputElement).value
+}
+
+const handleRenameCompositionStart = () => {
+  isRenameComposing.value = true
+  markRenameImeGuard()
+}
+
+const handleRenameCompositionUpdate = () => {
+  markRenameImeGuard()
+}
+
+const handleRenameCompositionEnd = (event: CompositionEvent) => {
+  isRenameComposing.value = false
+  markRenameImeGuard()
+  editingFileName.value = (event.target as HTMLInputElement).value
+}
+
+const handleRenameEnter = async (event: KeyboardEvent) => {
+  if (event.isComposing || event.keyCode === 229 || isRenameImeActive()) {
+    return
+  }
+
+  await finishRename({ force: true })
+}
+
+const handleRenamePointerDown = (event: PointerEvent) => {
+  const currentEditingPath = editingFilePath.value
+  if (!currentEditingPath) {
+    return
+  }
+
+  const input = editInputRefs.value[currentEditingPath]
+  if (input?.contains(event.target as Node)) {
+    return
+  }
+
+  if (isRenameImeActive()) {
+    return
+  }
+
+  void finishRename({ force: true })
+}
+
+watch(editingFilePath, (path) => {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  if (path) {
+    document.addEventListener('pointerdown', handleRenamePointerDown, true)
+    return
+  }
+
+  document.removeEventListener('pointerdown', handleRenamePointerDown, true)
+})
+
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('pointerdown', handleRenamePointerDown, true)
+  }
+})
 
 const openDeleteDialog = (file: FileItem) => {
   fileToDelete.value = file
@@ -175,11 +258,16 @@ const confirmDelete = async () => {
                     <input
                       v-if="editingFilePath === file.path"
                       :ref="(el) => { editInputRefs[file.path] = el as HTMLInputElement | null }"
-                      v-model="editingFileName"
+                      :value="editingFileName"
                       class="w-full rounded-lg border border-primary/30 bg-surface-container-highest px-2 py-1 text-sm text-on-surface focus:outline-none"
-                      @keyup.enter="finishRename"
-                      @keyup.esc="cancelRename"
-                      @blur="finishRename"
+                      @input="handleRenameInput"
+                      @compositionstart="handleRenameCompositionStart"
+                      @compositionupdate="handleRenameCompositionUpdate"
+                      @compositionend="handleRenameCompositionEnd"
+                      @keydown.stop
+                      @keydown.enter.prevent="handleRenameEnter"
+                      @keyup.stop
+                      @keyup.esc.prevent="cancelRename"
                       @click.stop
                     />
                     <span

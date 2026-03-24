@@ -72,6 +72,14 @@ const handleExport = async () => {
 
     const inlinePingFangFontFaceCss = await getInlinePingFangFontFaceCss()
 
+    const exportedPagesContainer = pagesContainer.cloneNode(true) as HTMLElement
+    if (!exportedPagesContainer.style.getPropertyValue('--pagedjs-page-count')) {
+      exportedPagesContainer.style.setProperty(
+        '--pagedjs-page-count',
+        String(exportedPagesContainer.querySelectorAll('.pagedjs_page').length),
+      )
+    }
+
     const htmlContent = `
       <!DOCTYPE html>
       <html class="light" lang="zh-CN">
@@ -100,9 +108,7 @@ const handleExport = async () => {
       </head>
       <body>
         <div class="pagedjs-wrapper">
-          <div class="pagedjs_pages">
-            ${pagesContainer.innerHTML}
-          </div>
+          ${exportedPagesContainer.outerHTML}
         </div>
       </body>
       </html>

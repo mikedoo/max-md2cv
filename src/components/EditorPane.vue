@@ -27,6 +27,52 @@ let isExternalUpdate = false
 
 const editableCompartment = new Compartment()
 const readOnlyCompartment = new Compartment()
+const LINE_FORMAT_OPTIONS = [
+  { label: '正文', value: 'paragraph', icon: 'notes' },
+  { label: '标题 2', value: 'heading2', icon: 'format_h2' },
+  { label: '标题 3', value: 'heading3', icon: 'format_h3' },
+  { label: '标题 4', value: 'heading4', icon: 'format_h4' },
+  { label: '标题 1', value: 'heading1', icon: 'format_h1' },
+  { label: '列表', value: 'list', icon: 'format_list_bulleted' },
+  { label: '引用', value: 'quote', icon: 'format_quote' },
+] as const
+
+type LineFormatValue = (typeof LINE_FORMAT_OPTIONS)[number]['value']
+
+const LINE_FORMAT_PREFIXES: Record<LineFormatValue, string> = {
+  paragraph: '',
+  heading1: '# ',
+  heading2: '## ',
+  heading3: '### ',
+  heading4: '#### ',
+  list: '- ',
+  quote: '> ',
+}
+
+const currentLineFormat = ref<LineFormatValue>('paragraph')
+
+const getLineFormatOption = (format: LineFormatValue) =>
+  LINE_FORMAT_OPTIONS.find((option) => option.value === format) ?? LINE_FORMAT_OPTIONS[0]
+
+interface ParsedLineFormat {
+  leadingWhitespace: string
+  prefix: string
+  content: string
+  format: LineFormatValue
+}
+
+interface LineFormatChange {
+  line: {
+    from: number
+    to: number
+    length: number
+    number: number
+    text: string
+  }
+  parsedLine: ParsedLineFormat
+  nextText: string
+  delta: number
+}
 
 const markdownHighlightStyle = HighlightStyle.define([
   {
@@ -78,6 +124,53 @@ const markdownHighlightStyle = HighlightStyle.define([
   },
 ])
 
+const parseLineFormat = (lineText: string): ParsedLineFormat => {
+  const leadingWhitespace = lineText.match(/^\s*/)?.[0] ?? ''
+  const contentText = lineText.slice(leadingWhitespace.length)
+  const headingMatch = contentText.match(/^(#{1,4})\s+/)
+
+  if (headingMatch) {
+    return {
+      leadingWhitespace,
+      prefix: headingMatch[0],
+      content: contentText.slice(headingMatch[0].length),
+      format: `heading${headingMatch[1].length}` as LineFormatValue,
+    }
+  }
+
+  const listMatch = contentText.match(/^(?:[-*+]\s+|\d+\.\s+)/)
+  if (listMatch) {
+    return {
+      leadingWhitespace,
+      prefix: listMatch[0],
+      content: contentText.slice(listMatch[0].length),
+      format: 'list' as const,
+    }
+  }
+
+  const quoteMatch = contentText.match(/^>\s?/)
+  if (quoteMatch) {
+    return {
+      leadingWhitespace,
+      prefix: quoteMatch[0],
+      content: contentText.slice(quoteMatch[0].length),
+      format: 'quote' as const,
+    }
+  }
+
+  return {
+    leadingWhitespace,
+    prefix: '',
+    content: contentText,
+    format: 'paragraph' as const,
+  }
+}
+
+const syncCurrentLineFormat = (state: EditorState) => {
+  const activeLine = state.doc.lineAt(state.selection.main.head)
+  currentLineFormat.value = parseLineFormat(activeLine.text).format
+}
+
 const scheduleAutoSave = () => {
   if (autoSaveTimer) {
     clearTimeout(autoSaveTimer)
@@ -116,6 +209,80 @@ const syncRecoveryFileName = () => {
 
 const focusEditor = () => {
   view?.focus()
+}
+
+const applyCurrentLineFormat = (nextFormat: LineFormatValue) => {
+  if (!view) {
+    return
+  }
+
+  const { state } = view
+  const { from, to } = state.selection.main
+  const startLine = state.doc.lineAt(from)
+  const endLine = state.doc.lineAt(to > from ? to - 1 : to)
+  const rangeFrom = startLine.from
+  const rangeTo = endLine.to
+  const nextPrefix = LINE_FORMAT_PREFIXES[nextFormat]
+  const lineChanges: LineFormatChange[] = []
+
+  for (let lineNumber = startLine.number; lineNumber <= endLine.number; lineNumber += 1) {
+    const line = state.doc.line(lineNumber)
+    const parsedLine = parseLineFormat(line.text)
+    const nextText = `${parsedLine.leadingWhitespace}${nextPrefix}${parsedLine.content}`
+
+    lineChanges.push({
+      line,
+      parsedLine,
+      nextText,
+      delta: nextText.length - line.length,
+    })
+  }
+
+  const mapSelectionPos = (position: number) => {
+    let cumulativeDelta = 0
+
+    for (const lineChange of lineChanges) {
+      const { line, parsedLine } = lineChange
+      const leadingEnd = line.from + parsedLine.leadingWhitespace.length
+      const contentStart = leadingEnd + parsedLine.prefix.length
+      const nextLineFrom = line.from + cumulativeDelta
+      const nextContentStart = nextLineFrom + parsedLine.leadingWhitespace.length + nextPrefix.length
+
+      if (position < line.from) {
+        return position + cumulativeDelta
+      }
+
+      if (position <= line.to) {
+        if (position < leadingEnd) {
+          return position + cumulativeDelta
+        }
+
+        if (position <= contentStart) {
+          return nextContentStart
+        }
+
+        const contentOffset = Math.min(position - contentStart, parsedLine.content.length)
+        return nextContentStart + contentOffset
+      }
+
+      cumulativeDelta += lineChange.delta
+    }
+
+    return position + cumulativeDelta
+  }
+
+  view.dispatch({
+    changes: {
+      from: rangeFrom,
+      to: rangeTo,
+      insert: lineChanges.map((lineChange) => lineChange.nextText).join('\n'),
+    },
+    selection: {
+      anchor: mapSelectionPos(state.selection.main.anchor),
+      head: mapSelectionPos(state.selection.main.head),
+    },
+  })
+  focusEditor()
 }
 
 const jumpToLine = (lineNumber: number) => {
@@ -386,6 +553,10 @@ onMounted(() => {
       readOnlyCompartment.of(EditorState.readOnly.of(false)),
       syntaxHighlighting(markdownHighlightStyle),
       EditorView.updateListener.of((update) => {
+        if (update.docChanged || update.selectionSet) {
+          syncCurrentLineFormat(update.state)
+        }
+
         if (!update.docChanged) {
           return
         }
@@ -445,6 +616,7 @@ onMounted(() => {
 
   syncEditorReadOnly()
   syncRecoveryFileName()
+  syncCurrentLineFormat(view.state)
 })
 
 onBeforeUnmount(async () => {
@@ -569,6 +741,35 @@ watch(
         class="flex items-center gap-3 transition-opacity"
         :class="{ 'pointer-events-none opacity-45': isFormattingDisabled }"
       >
+        <el-select
+          :model-value="currentLineFormat"
+          size="small"
+          placeholder="文本属性"
+          class="editor-line-format-select"
+          :disabled="isFormattingDisabled"
+          @update:model-value="applyCurrentLineFormat"
+        >
+          <template #label="{ value }">
+            <span class="editor-line-format-current">
+              <span class="material-symbols-outlined text-[18px]">
+                {{ getLineFormatOption(value as LineFormatValue).icon }}
+              </span>
+            </span>
+          </template>
+          <el-option
+            v-for="option in LINE_FORMAT_OPTIONS"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          >
+            <div class="editor-line-format-option">
+              <span class="material-symbols-outlined text-[18px] text-primary/90">
+                {{ option.icon }}
+              </span>
+              <span>{{ option.label }}</span>
+            </div>
+          </el-option>
+        </el-select>
         <button @click="toggleInlineSyntax('**')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="加粗">
           <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_bold</span>
         </button>
@@ -608,3 +809,53 @@ watch(
     </div>
   </section>
 </template>
+
+<style scoped>
+.editor-line-format-select {
+  width: 3.5rem;
+}
+
+.editor-line-format-select :deep(.el-select__wrapper) {
+  min-height: 2.25rem;
+  border-radius: 999px;
+  padding-inline: 0.625rem 0.5rem;
+  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 92%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-outline-variant) 22%, transparent);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.editor-line-format-select:hover :deep(.el-select__wrapper),
+.editor-line-format-select.is-focus :deep(.el-select__wrapper) {
+  background-color: var(--color-surface-container-high);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.editor-line-format-select :deep(.el-select__selected-item),
+.editor-line-format-select :deep(.el-select__placeholder) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.editor-line-format-select :deep(.el-select__caret) {
+  font-size: 1rem;
+  color: color-mix(in srgb, var(--color-on-surface-variant) 72%, white);
+}
+
+.editor-line-format-current {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-surface-variant);
+}
+
+.editor-line-format-option {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+</style>
