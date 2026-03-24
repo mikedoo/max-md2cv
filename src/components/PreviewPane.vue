@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import { marked } from 'marked'
 import { Previewer } from 'pagedjs'
 import { useResumeStore, type ResumeStyle } from '../stores/resume'
 import { useDebounceFn } from '@vueuse/core'
 import { enhanceResumeHtml } from '../utils/resumeParser'
-import { renderManualPageBreaks } from '../utils/manualPageBreak'
 import { pingFangFontFaceCss } from '../utils/fontAssets'
+import { renderMarkdownToHtml } from '../utils/markdownRender'
 import PreviewToolbar from './preview/PreviewToolbar.vue'
 
 const store = useResumeStore()
@@ -230,7 +229,7 @@ const renderPdfPreview = async (request: PreviewRenderRequest) => {
   const stagingContainer = createPreviewStagingContainer()
   let renderSucceeded = false
 
-  const htmlContent = await marked.parse(renderManualPageBreaks(request.markdownText))
+  const htmlContent = await renderMarkdownToHtml(request.markdownText)
   const cvStyle = request.cvStyle
 
   const injectCss = buildPreviewStyles(cvStyle)

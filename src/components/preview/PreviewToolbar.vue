@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import SoftSelect from '../shared/SoftSelect.vue'
 import { useResumeStore } from '../../stores/resume'
 
 defineProps<{
@@ -12,7 +12,6 @@ defineEmits<{
 }>()
 
 const store = useResumeStore()
-const isTemplateDropdownOpen = ref(false)
 
 const FONT_OPTIONS = [
   { label: '苹方', value: '"PingFang SC", "Microsoft YaHei", sans-serif' },
@@ -26,15 +25,20 @@ const FONT_OPTIONS = [
 
 const THEME_COLORS = [
   '#4c49cc',
-  '#ef4444',
-  '#10b981',
-  '#f59e0b',
-  '#6366f1',
-  '#8b5cf6',
-  '#ec4899',
-  '#14b8a6',
+  '#302EA3',
+  '#0050D1',
+  '#0062FF',
+  '#2C83EC',
+  '#2477BF',
+  '#0D98BA',
+  '#004A99',
+  '#003396',
+  '#005451',
+  '#008080',
+  '#1AB0A5',
+  '#ED7700',
   '#000000',
-  '#333333',
+  '#242424'
 ] as const
 
 const handleTemplateChange = (templateId: string) => {
@@ -52,36 +56,33 @@ const handleThemeColorHexInput = (event: Event) => {
 <template>
   <div class="preview-toolbar flex h-16 shrink-0 items-center justify-between border-b border-outline-variant/10 bg-surface-container-high/35 px-5 backdrop-blur-sm z-10">
     <div class="flex items-center gap-2">
-      <el-dropdown
-        trigger="click"
-        @command="handleTemplateChange"
-        @visible-change="(visible: boolean) => isTemplateDropdownOpen = visible"
+      <SoftSelect
+        :model-value="store.activeTemplate"
+        width="152px"
+        placeholder="妯℃澘"
+        @update:model-value="handleTemplateChange($event as string)"
       >
-        <span :class="['preview-toolbar-pill', 'preview-template-trigger', 'min-w-[108px]', 'max-w-[160px]', 'cursor-pointer', 'justify-between', { 'is-open': isTemplateDropdownOpen }]">
-          <span class="material-symbols-outlined preview-template-icon text-[16px]">palette</span>
-          <span class="preview-toolbar-label">{{ store.availableTemplates.find(t => t.id === store.activeTemplate)?.name || '模板' }}</span>
-          <span class="material-symbols-outlined preview-template-chevron text-[16px] text-on-surface-variant/70">expand_more</span>
-        </span>
-        <template #dropdown>
-          <el-dropdown-menu class="min-w-[120px] rounded-xl overflow-hidden py-1 border-none shadow-ambient">
-            <el-dropdown-item
-              v-for="tpl in store.availableTemplates"
-              :key="tpl.id"
-              :command="tpl.id"
-              :class="{ 'text-primary font-bold bg-primary/5': store.activeTemplate === tpl.id }"
-            >
-              {{ tpl.name }}
-            </el-dropdown-item>
-          </el-dropdown-menu>
+        <template #label="{ value }">
+          <span class="preview-template-select-label">
+            <span class="material-symbols-outlined preview-template-select-icon text-[16px]">palette</span>
+            <span class="preview-toolbar-label">
+              {{ store.availableTemplates.find(t => t.id === value)?.name || '模板' }}
+            </span>
+          </span>
         </template>
-      </el-dropdown>
+        <el-option
+          v-for="tpl in store.availableTemplates"
+          :key="tpl.id"
+          :label="tpl.name"
+          :value="tpl.id"
+        />
+      </SoftSelect>
     </div>
 
     <div class="preview-toolbar-center flex flex-1 items-center justify-center gap-3">
-      <el-select
+      <SoftSelect
         v-model="store.resumeStyle.fontFamily"
-        size="small"
-        style="width: 108px"
+        width="108px"
         placeholder="字体"
       >
         <el-option
@@ -90,7 +91,7 @@ const handleThemeColorHexInput = (event: Event) => {
           :label="font.label"
           :value="font.value"
         />
-      </el-select>
+      </SoftSelect>
 
       <el-popover placement="bottom" trigger="click" :width="240">
         <template #reference>
@@ -127,9 +128,9 @@ const handleThemeColorHexInput = (event: Event) => {
           <div class="my-1 h-[1px] w-full bg-outline-variant/20"></div>
 
           <div class="flex items-center gap-3">
-            <div class="relative h-8 w-8 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-outline-variant/30 shadow-sm">
+            <div class="relative h-8 w-8 flex-shrink-0 cursor-pointer overflow-hidden rounded-lg border border-outline-variant/30 shadow-sm flex items-center justify-center">
               <div class="absolute inset-0 z-0" :style="{ backgroundColor: store.resumeStyle.themeColor }"></div>
-              <span class="material-symbols-outlined pointer-events-none absolute inset-0 z-10 m-auto flex h-5 w-5 items-center justify-center text-[18px] text-white/80 drop-shadow">colorize</span>
+              <span class="material-symbols-outlined pointer-events-none z-10 text-[18px] text-white/80 drop-shadow">colorize</span>
               <input
                 v-model="store.resumeStyle.themeColor"
                 type="color"
@@ -271,82 +272,25 @@ const handleThemeColorHexInput = (event: Event) => {
 </template>
 
 <style scoped>
-.preview-template-trigger {
+.preview-template-select-label {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
-  padding-inline: 0.875rem 0.75rem;
-  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+  min-width: 0;
 }
 
-.preview-template-trigger .preview-toolbar-label {
+.preview-template-select-label .preview-toolbar-label {
   min-width: 0;
   flex: 1;
 }
 
-.preview-template-trigger .material-symbols-outlined {
+.preview-template-select-icon {
   flex-shrink: 0;
-  transition: transform 0.2s ease, color 0.2s ease;
-}
-
-.preview-template-trigger:hover,
-.preview-template-trigger.is-open {
-  transform: translateY(-1px);
-  color: var(--color-on-surface);
-  background-color: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-container-lowest));
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 16%, transparent),
-    0 10px 24px rgba(76, 73, 204, 0.08);
-}
-
-.preview-template-trigger:hover .preview-template-icon,
-.preview-template-trigger.is-open .preview-template-icon {
   color: var(--color-primary);
-  transform: rotate(-10deg) scale(1.03);
-}
-
-.preview-template-trigger:hover .preview-template-icon,
-.preview-template-trigger.is-open .preview-template-icon,
-.preview-template-trigger:hover .preview-template-chevron,
-.preview-template-trigger.is-open .preview-template-chevron {
-  color: var(--color-primary);
-}
-
-.preview-template-trigger.is-open .preview-template-chevron {
-  transform: rotate(180deg);
 }
 
 .preview-toolbar-center {
   gap: 0.625rem;
-}
-
-.preview-toolbar-center :deep(.el-select) {
-  width: 108px !important;
-}
-
-.preview-toolbar-center :deep(.el-select .el-select__wrapper) {
-  min-height: 2.25rem;
-  border-radius: 999px;
-  padding-inline: 0.75rem 0.625rem;
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 92%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-outline-variant) 22%, transparent);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-}
-
-.preview-toolbar-center :deep(.el-select:hover .el-select__wrapper),
-.preview-toolbar-center :deep(.el-select.is-focus .el-select__wrapper) {
-  background-color: var(--color-surface-container-high);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 20%, transparent);
-}
-
-.preview-toolbar-center :deep(.el-select .el-select__selected-item),
-.preview-toolbar-center :deep(.el-select .el-select__placeholder) {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-on-surface-variant);
-}
-
-.preview-toolbar-center :deep(.el-select .el-select__caret) {
-  font-size: 1rem;
-  color: color-mix(in srgb, var(--color-on-surface-variant) 72%, white);
 }
 
 .preview-toolbar-center :deep(button),

@@ -43,7 +43,6 @@ const handleCreateFile = async () => {
   <aside
     class="relative z-20 flex h-full flex-shrink-0 flex-col overflow-hidden bg-surface-container-lowest transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)]"
     :class="store.isSidebarOpen ? 'w-80 shadow-[4px_0_24px_rgba(0,0,0,0.03)]' : 'w-0 opacity-0'"
-    :style="{ '--sidebar-accent': store.resumeStyle.themeColor }"
   >
     <div class="absolute left-0 top-0 flex h-full w-80 flex-col font-['Manrope'] antialiased">
       <div class="flex items-center gap-3 bg-surface-container-lowest px-4 py-5 pb-4 shrink-0">
@@ -100,7 +99,7 @@ const handleCreateFile = async () => {
         <transition name="fade">
           <div
             v-if="isCreating"
-            class="flex w-full items-center gap-2 rounded-xl border border-primary/20 bg-surface-container px-3 py-2 shadow-sm"
+            class="sidebar-accent-frame flex w-full items-center gap-2 rounded-xl border bg-surface-container px-3 py-2 shadow-sm"
           >
             <input
               v-model="newFileName"

@@ -5,7 +5,7 @@
 }
 
 .resume-document {
-  color: #333333;
+  color: #000;
   line-height: var(--cv-line-height, 1.5);
   font-family: var(--cv-font-family, "Times New Roman", Times, serif);
 }
@@ -16,25 +16,26 @@
   line-height: 1.2;
   text-align: center;
   margin-bottom: 0.5rem;
-  border-bottom: 1px solid var(--cv-theme-color, #000);
-  color: var(--cv-theme-color, inherit);
+    color: #000000;
   padding-bottom: 1rem;
 }
 
 .resume-document .job-intention {
   line-height: 1.3;
+  text-align: center;
 }
 
 .resume-document .job-intention + p,
 .resume-document .contact-info--icon,
 .resume-document .contact-info-item {
   line-height: 1.2;
+  text-align: center;
 }
 
 .resume-document h2 {
   font-size: var(--cv-h2-size, 1.2rem);
   font-weight: bold;
-  color: var(--cv-theme-color, #000);
+  color: #000;
   margin-top: 1.5rem;
   margin-bottom: 0.5rem;
   border-bottom: 1px solid #ccc;
@@ -43,7 +44,14 @@
 .resume-document h3 {
   font-size: var(--cv-h3-size, 1rem);
   font-weight: bold;
-  color: var(--cv-theme-color, inherit);
+  color: #000000;
+  margin-bottom: 0.25rem;
+}
+
+.resume-document h4 {
+  font-size: calc(var(--cv-h3-size, 1rem) * 0.9);
+  font-weight: bold;
+  color: #000;
   margin-bottom: 0.25rem;
 }
 
@@ -62,7 +70,7 @@
 .resume-document blockquote {
   font-family: inherit;
   font-size: calc(0.9rem * 0.9);
-  color: #4a4a4a;
+  color: #000000;
   margin: 0 0 0.75rem;
 }
 
@@ -71,3 +79,4 @@
   font-size: inherit;
   color: inherit;
 }
+

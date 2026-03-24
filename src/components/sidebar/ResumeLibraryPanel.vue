@@ -230,27 +230,14 @@ const confirmDelete = async () => {
 
           <ul v-else class="sidebar-panel-scroll space-y-1">
             <li v-for="file in store.fileList" :key="file.path" class="group relative">
-              <el-dropdown trigger="contextmenu" @command="handleContextMenu" class="!block w-full overflow-hidden">
+              <el-dropdown trigger="contextmenu" popper-class="soft-dropdown-popper" @command="handleContextMenu" class="!block w-full overflow-hidden">
                 <div
                   class="flex cursor-pointer items-center overflow-hidden rounded-2xl px-4 py-2.5 transition-all duration-200"
-                  :class="store.activeFilePath === file.path ? 'font-medium' : 'text-on-surface hover:bg-surface-container-highest'"
-                  :style="
-                    store.activeFilePath === file.path
-                      ? {
-                          backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 12%, white)`,
-                          color: store.resumeStyle.themeColor,
-                        }
-                      : undefined
-                  "
+                  :class="store.activeFilePath === file.path ? 'sidebar-accent-surface font-medium' : 'text-on-surface hover:bg-surface-container-highest'"
                   @click="handleFileClick(file.path)"
                   @dblclick="startRename(file)"
                 >
-                  <span
-                    class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center"
-                    :style="{
-                      color: '#2563eb',
-                    }"
-                  >
+                  <span class="sidebar-accent-text mr-2 flex h-8 w-8 shrink-0 items-center justify-center">
                     <span class="material-symbols-outlined text-[20px]">description</span>
                   </span>
 
@@ -259,7 +246,7 @@ const confirmDelete = async () => {
                       v-if="editingFilePath === file.path"
                       :ref="(el) => { editInputRefs[file.path] = el as HTMLInputElement | null }"
                       :value="editingFileName"
-                      class="w-full rounded-lg border border-primary/30 bg-surface-container-highest px-2 py-1 text-sm text-on-surface focus:outline-none"
+                      class="sidebar-accent-input w-full rounded-lg border bg-surface-container-highest px-2 py-1 text-sm text-on-surface"
                       @input="handleRenameInput"
                       @compositionstart="handleRenameCompositionStart"
                       @compositionupdate="handleRenameCompositionUpdate"
@@ -298,7 +285,7 @@ const confirmDelete = async () => {
                 </div>
 
                 <template #dropdown>
-                  <el-dropdown-menu>
+                  <el-dropdown-menu class="soft-dropdown-menu">
                     <el-dropdown-item :command="{ action: 'duplicate', file }">
                       <span class="flex items-center gap-2">
                         <span class="material-symbols-outlined text-[18px]">content_copy</span>
@@ -311,7 +298,7 @@ const confirmDelete = async () => {
                         重命名
                       </span>
                     </el-dropdown-item>
-                    <el-dropdown-item :command="{ action: 'delete', file }" class="!text-error">
+                    <el-dropdown-item :command="{ action: 'delete', file }" class="soft-dropdown-item-danger">
                       <span class="flex items-center gap-2">
                         <span class="material-symbols-outlined text-[18px]">delete</span>
                         删除
@@ -353,7 +340,7 @@ const confirmDelete = async () => {
                 class="flex items-center gap-3 rounded-2xl px-4 py-3 text-on-surface transition-colors duration-200 hover:bg-surface-container-highest/60"
               >
                 <button
-                  class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left transition-colors duration-200 hover:text-primary"
+                  class="sidebar-accent-hover flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left transition-colors duration-200"
                   @click="handlePdfClick(file.path)"
                 >
                   <span class="material-symbols-outlined shrink-0 text-[20px] text-[#dc2626]">picture_as_pdf</span>
@@ -398,11 +385,7 @@ const confirmDelete = async () => {
 
           <div v-else class="flex h-full flex-col gap-4">
             <button
-              class="w-full cursor-pointer rounded-2xl py-2.5 text-sm font-medium shadow-sm transition-all duration-200"
-              :style="{
-                backgroundColor: `color-mix(in srgb, ${store.resumeStyle.themeColor} 14%, white)`,
-                color: store.resumeStyle.themeColor,
-              }"
+              class="sidebar-accent-surface w-full cursor-pointer rounded-2xl py-2.5 text-sm font-medium shadow-sm transition-all duration-200"
               @click="handlePhotoImport"
             >
               <span class="flex items-center justify-center gap-2">
@@ -476,7 +459,7 @@ const confirmDelete = async () => {
 }
 
 .library-tabs :deep(.el-tabs__nav-wrap::after) {
-  background-color: color-mix(in srgb, var(--sidebar-accent) 18%, var(--color-surface-variant));
+  background-color: color-mix(in srgb, var(--sidebar-accent, var(--color-primary)) 18%, var(--color-surface-variant));
 }
 
 .library-tabs :deep(.el-tabs__nav-scroll) {
@@ -503,13 +486,13 @@ const confirmDelete = async () => {
 
 .library-tabs :deep(.el-tabs__item:hover),
 .library-tabs :deep(.el-tabs__item.is-active) {
-  color: var(--sidebar-accent);
+  color: var(--sidebar-accent, var(--color-primary));
 }
 
 .library-tabs :deep(.el-tabs__active-bar) {
   height: 3px;
   border-radius: 999px;
-  background-color: var(--sidebar-accent);
+  background-color: var(--sidebar-accent, var(--color-primary));
 }
 
 .library-tabs :deep(.el-tabs__content) {

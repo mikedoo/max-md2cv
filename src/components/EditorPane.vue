@@ -1,21 +1,29 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Compartment, EditorState } from '@codemirror/state'
+import { Compartment, EditorState, type Range } from '@codemirror/state'
 import { EditorView, basicSetup } from 'codemirror'
 import { markdown } from '@codemirror/lang-markdown'
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language'
+import { Decoration, type DecorationSet, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { ElMessage } from 'element-plus'
+import EditorShell from './editor/EditorShell.vue'
+import EditorToolbar from './editor/EditorToolbar.vue'
+import { type InsertMenuValue, type LineFormatValue } from './editor/toolbarOptions'
 import { useResumeStore } from '../stores/resume'
 import { MANUAL_PAGE_BREAK_MARKER } from '../utils/manualPageBreak'
 
 const editorContainer = ref<HTMLElement | null>(null)
 const hasCopiedMarkdown = ref(false)
+const hasTextSelection = ref(false)
 const recoveryFileName = ref('')
 const store = useResumeStore()
 
+const hasActiveFile = computed(() => Boolean(store.activeFilePath))
 const isMissingFile = computed(() => store.activeFileStatus === 'missing')
 const hasAlternativeFiles = computed(() => store.fileList.length > 0)
+const editorViewMode = ref<'source' | 'render'>('source')
+const isRenderView = computed(() => editorViewMode.value === 'render')
 const isFormattingDisabled = computed(
   () => !store.activeFilePath || store.activeFileStatus === 'missing',
 )
@@ -27,17 +35,8 @@ let isExternalUpdate = false
 
 const editableCompartment = new Compartment()
 const readOnlyCompartment = new Compartment()
-const LINE_FORMAT_OPTIONS = [
-  { label: '正文', value: 'paragraph', icon: 'notes' },
-  { label: '标题 2', value: 'heading2', icon: 'format_h2' },
-  { label: '标题 3', value: 'heading3', icon: 'format_h3' },
-  { label: '标题 4', value: 'heading4', icon: 'format_h4' },
-  { label: '标题 1', value: 'heading1', icon: 'format_h1' },
-  { label: '列表', value: 'list', icon: 'format_list_bulleted' },
-  { label: '引用', value: 'quote', icon: 'format_quote' },
-] as const
-
-type LineFormatValue = (typeof LINE_FORMAT_OPTIONS)[number]['value']
+const editorViewModeCompartment = new Compartment()
+const renderDecorationsCompartment = new Compartment()
 
 const LINE_FORMAT_PREFIXES: Record<LineFormatValue, string> = {
   paragraph: '',
@@ -50,9 +49,6 @@ const LINE_FORMAT_PREFIXES: Record<LineFormatValue, string> = {
 }
 
 const currentLineFormat = ref<LineFormatValue>('paragraph')
-
-const getLineFormatOption = (format: LineFormatValue) =>
-  LINE_FORMAT_OPTIONS.find((option) => option.value === format) ?? LINE_FORMAT_OPTIONS[0]
 
 interface ParsedLineFormat {
   leadingWhitespace: string
@@ -124,6 +120,206 @@ const markdownHighlightStyle = HighlightStyle.define([
   },
 ])
 
+const HEADING_LINE_RE = /^(\s*)(#{1,4}\s+)/
+const QUOTE_LINE_RE = /^(\s*)(>\s?)/
+const LIST_LINE_RE = /^(\s*)([-*+]\s+|\d+\.\s+)/
+
+class InlineTextWidget extends WidgetType {
+  constructor(
+    private readonly text: string,
+    private readonly className: string,
+  ) {
+    super()
+  }
+
+  eq(other: InlineTextWidget) {
+    return other.text === this.text && other.className === this.className
+  }
+
+  toDOM() {
+    const span = document.createElement('span')
+    span.className = this.className
+    span.textContent = this.text
+    return span
+  }
+
+  ignoreEvent() {
+    return false
+  }
+}
+
+const buildPageBreakLineDecorations = (state: EditorState): DecorationSet => {
+  const decorations: Range<Decoration>[] = []
+
+  for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
+    const line = state.doc.line(lineNumber)
+
+    if (line.text.trim() !== MANUAL_PAGE_BREAK_MARKER) {
+      continue
+    }
+
+    decorations.push(Decoration.line({ class: 'cm-md-source-page-break-line' }).range(line.from))
+  }
+
+  return Decoration.set(decorations, true)
+}
+
+const sourcePageBreakDecorations = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = buildPageBreakLineDecorations(view.state)
+  }
+
+  update(update: ViewUpdate) {
+    if (!update.docChanged) {
+      return
+    }
+
+    this.decorations = buildPageBreakLineDecorations(update.state)
+  }
+}, {
+  decorations: (value) => value.decorations,
+})
+
+const createReplaceDecoration = (
+  from: number,
+  to: number,
+  widgetText?: string,
+  widgetClassName?: string,
+) => {
+  if (widgetText && widgetClassName) {
+    return Decoration.replace({
+      widget: new InlineTextWidget(widgetText, widgetClassName),
+    }).range(from, to)
+  }
+
+  return Decoration.replace({}).range(from, to)
+}
+
+const buildRenderDecorations = (state: EditorState): DecorationSet => {
+  const decorations: Range<Decoration>[] = []
+
+  for (let lineNumber = 1; lineNumber <= state.doc.lines; lineNumber += 1) {
+    const line = state.doc.line(lineNumber)
+
+    if (line.text.trim() === MANUAL_PAGE_BREAK_MARKER) {
+      decorations.push(Decoration.line({ class: 'cm-md-render-page-break-line' }).range(line.from))
+      decorations.push(
+        createReplaceDecoration(
+          line.from,
+          line.to,
+          '--分页符--',
+          'cm-md-render-page-break-chip',
+        ),
+      )
+      continue
+    }
+
+    const headingMatch = line.text.match(HEADING_LINE_RE)
+    if (headingMatch) {
+      const prefixFrom = line.from + headingMatch[1].length
+      const prefixTo = prefixFrom + headingMatch[2].length
+
+      decorations.push(
+        Decoration.line({
+          class: `cm-md-render-heading cm-md-render-heading-${headingMatch[2].trim().length}`,
+        }).range(line.from),
+      )
+      decorations.push(createReplaceDecoration(prefixFrom, prefixTo))
+      continue
+    }
+
+    const quoteMatch = line.text.match(QUOTE_LINE_RE)
+    if (quoteMatch) {
+      const prefixFrom = line.from + quoteMatch[1].length
+      const prefixTo = prefixFrom + quoteMatch[2].length
+
+      decorations.push(Decoration.line({ class: 'cm-md-render-quote' }).range(line.from))
+      decorations.push(createReplaceDecoration(prefixFrom, prefixTo))
+      continue
+    }
+
+    const listMatch = line.text.match(LIST_LINE_RE)
+    if (!listMatch) {
+      continue
+    }
+
+    const prefixFrom = line.from + listMatch[1].length
+    const prefixTo = prefixFrom + listMatch[2].length
+    const rawMarker = listMatch[2].trim()
+    const isOrderedMarker = /^\d+\.$/.test(rawMarker)
+
+    decorations.push(Decoration.line({ class: 'cm-md-render-list' }).range(line.from))
+    decorations.push(
+      createReplaceDecoration(
+        prefixFrom,
+        prefixTo,
+        isOrderedMarker ? `${rawMarker} ` : '• ',
+        isOrderedMarker
+          ? 'cm-md-render-list-marker cm-md-render-list-marker-ordered'
+          : 'cm-md-render-list-marker',
+      ),
+    )
+  }
+
+  syntaxTree(state).iterate({
+    enter: ({ from, to, type }) => {
+      if (type.name === 'StrongEmphasis') {
+        decorations.push(Decoration.mark({ class: 'cm-md-render-strong' }).range(from, to))
+        return
+      }
+
+      if (type.name === 'Emphasis') {
+        decorations.push(Decoration.mark({ class: 'cm-md-render-emphasis' }).range(from, to))
+        return
+      }
+
+      if (type.name === 'Link') {
+        decorations.push(Decoration.mark({ class: 'cm-md-render-link' }).range(from, to))
+        return
+      }
+
+      if (type.name === 'InlineCode') {
+        decorations.push(Decoration.mark({ class: 'cm-md-render-inline-code' }).range(from, to))
+        return
+      }
+
+      if (type.name === 'EmphasisMark' || type.name === 'LinkMark' || type.name === 'URL' || type.name === 'CodeMark') {
+        decorations.push(createReplaceDecoration(from, to))
+      }
+    },
+  })
+
+  return Decoration.set(decorations, true)
+}
+
+const renderMarkdownDecorations = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = buildRenderDecorations(view.state)
+  }
+
+  update(update: ViewUpdate) {
+    if (!update.docChanged && !update.viewportChanged) {
+      return
+    }
+
+    this.decorations = buildRenderDecorations(update.state)
+  }
+}, {
+  decorations: (value) => value.decorations,
+})
+
+const createEditorViewModeExtension = () => EditorView.editorAttributes.of({
+  class: isRenderView.value ? 'cm-editor-render' : 'cm-editor-source',
+})
+
+const createRenderDecorationsExtension = () => (
+  isRenderView.value ? [renderMarkdownDecorations] : []
+)
+
 const parseLineFormat = (lineText: string): ParsedLineFormat => {
   const leadingWhitespace = lineText.match(/^\s*/)?.[0] ?? ''
   const contentText = lineText.slice(leadingWhitespace.length)
@@ -171,6 +367,10 @@ const syncCurrentLineFormat = (state: EditorState) => {
   currentLineFormat.value = parseLineFormat(activeLine.text).format
 }
 
+const syncTextSelection = (state: EditorState) => {
+  hasTextSelection.value = !state.selection.main.empty
+}
+
 const scheduleAutoSave = () => {
   if (autoSaveTimer) {
     clearTimeout(autoSaveTimer)
@@ -211,8 +411,57 @@ const focusEditor = () => {
   view?.focus()
 }
 
-const applyCurrentLineFormat = (nextFormat: LineFormatValue) => {
+const hasEditableEditor = () => {
+  return Boolean(view) && !isFormattingDisabled.value
+}
+
+const hasNonEmptySelection = () => {
   if (!view) {
+    return false
+  }
+
+  return !view.state.selection.main.empty
+}
+
+const setEditorViewMode = (mode: 'source' | 'render') => {
+  editorViewMode.value = mode
+
+  if (view) {
+    view.dispatch({
+      effects: [
+        editorViewModeCompartment.reconfigure(createEditorViewModeExtension()),
+        renderDecorationsCompartment.reconfigure(createRenderDecorationsExtension()),
+      ],
+    })
+  }
+
+  requestAnimationFrame(() => {
+    view?.requestMeasure()
+    focusEditor()
+  })
+}
+
+const toggleEditorView = () => {
+  setEditorViewMode(isRenderView.value ? 'source' : 'render')
+}
+
+const scrollEditorToLine = (lineNumber: number) => {
+  if (!view) {
+    return
+  }
+
+  const boundedLine = Math.max(1, Math.min(lineNumber, view.state.doc.lines))
+  const targetLine = view.state.doc.line(boundedLine)
+
+  view.dispatch({
+    selection: { anchor: targetLine.from, head: targetLine.from },
+    effects: EditorView.scrollIntoView(targetLine.from, { y: 'center' }),
+  })
+  focusEditor()
+}
+
+const applyCurrentLineFormat = (nextFormat: LineFormatValue) => {
+  if (!hasEditableEditor() || !view) {
     return
   }
 
@@ -290,18 +539,11 @@ const jumpToLine = (lineNumber: number) => {
     return
   }
 
-  const boundedLine = Math.max(1, Math.min(lineNumber, view.state.doc.lines))
-  const targetLine = view.state.doc.line(boundedLine)
-
-  view.dispatch({
-    selection: { anchor: targetLine.from, head: targetLine.from },
-    effects: EditorView.scrollIntoView(targetLine.from, { y: 'center' }),
-  })
-  focusEditor()
+  scrollEditorToLine(lineNumber)
 }
 
 const insertManualPageBreak = () => {
-  if (!view) return
+  if (!hasEditableEditor() || !view) return
 
   const { state } = view
   const { from, to } = state.selection.main
@@ -335,10 +577,10 @@ const insertManualPageBreak = () => {
 }
 
 const toggleInlineSyntax = (prefix: string, suffix: string = prefix) => {
-  if (!view) return
+  if (!hasEditableEditor() || !view || !hasNonEmptySelection()) return
 
   const { state } = view
-  const { from, to, empty } = state.selection.main
+  const { from, to } = state.selection.main
   const selectedText = state.doc.sliceString(from, to)
   const selectedHasWrapper =
     selectedText.length >= prefix.length + suffix.length &&
@@ -362,7 +604,7 @@ const toggleInlineSyntax = (prefix: string, suffix: string = prefix) => {
     ? state.doc.sliceString(to, to + suffix.length)
     : ''
 
-  if (!empty && beforeSelection === prefix && afterSelection === suffix) {
+  if (beforeSelection === prefix && afterSelection === suffix) {
     view.dispatch({
       changes: [
         { from: from - prefix.length, to: from, insert: '' },
@@ -378,59 +620,39 @@ const toggleInlineSyntax = (prefix: string, suffix: string = prefix) => {
     changes: { from, to, insert: `${prefix}${selectedText}${suffix}` },
     selection: {
       anchor: from + prefix.length,
-      head: empty ? from + prefix.length : to + prefix.length,
+      head: to + prefix.length,
     },
   })
   focusEditor()
 }
 
-const toggleLinePrefix = (prefix: string) => {
-  if (!view) return
-
-  const { state } = view
-  const { from, to } = state.selection.main
-  const startLine = state.doc.lineAt(from)
-  const endLine = state.doc.lineAt(to > from ? to - 1 : to)
-  const rangeFrom = startLine.from
-  const rangeTo = endLine.to
-  const blockText = state.doc.sliceString(rangeFrom, rangeTo)
-  const lines = blockText.split('\n')
-
-  if (lines.length === 1 && lines[0] === '') {
-    view.dispatch({
-      changes: { from: rangeFrom, to: rangeTo, insert: prefix },
-      selection: { anchor: rangeFrom + prefix.length, head: rangeFrom + prefix.length },
-    })
-    focusEditor()
+const insertWrappedSyntax = (prefix: string, suffix: string, emptyContent: string = '') => {
+  if (!hasEditableEditor() || !view) {
     return
   }
 
-  const nonEmptyLines = lines.filter((line) => line.length > 0)
-  const shouldRemove =
-    nonEmptyLines.length > 0 && nonEmptyLines.every((line) => line.startsWith(prefix))
-  const nextBlockText = lines
-    .map((line) => {
-      if (!line.length) {
-        return line
-      }
-
-      if (shouldRemove && line.startsWith(prefix)) {
-        return line.slice(prefix.length)
-      }
-
-      return shouldRemove ? line : `${prefix}${line}`
-    })
-    .join('\n')
+  const { state } = view
+  const { from, to, empty } = state.selection.main
+  const selectedText = state.doc.sliceString(from, to)
+  const content = empty ? emptyContent : selectedText
 
   view.dispatch({
-    changes: { from: rangeFrom, to: rangeTo, insert: nextBlockText },
-    selection: { anchor: rangeFrom, head: rangeFrom + nextBlockText.length },
+    changes: { from, to, insert: `${prefix}${content}${suffix}` },
+    selection: empty
+      ? {
+          anchor: from + prefix.length,
+          head: from + prefix.length + emptyContent.length,
+        }
+      : {
+          anchor: from + prefix.length,
+          head: from + prefix.length + selectedText.length,
+        },
   })
   focusEditor()
 }
 
 const toggleLinkSyntax = () => {
-  if (!view) return
+  if (!hasEditableEditor() || !view) return
 
   const { state } = view
   const { from, to } = state.selection.main
@@ -474,6 +696,35 @@ const toggleLinkSyntax = () => {
     },
   })
   focusEditor()
+}
+
+const insertDateSyntax = () => {
+  insertWrappedSyntax('[', ']')
+}
+
+const insertEmphasisSyntax = () => {
+  toggleInlineSyntax('**【', '】**')
+}
+
+const handleInsertCommand = (command: InsertMenuValue) => {
+  if (command === 'link') {
+    toggleLinkSyntax()
+    return
+  }
+
+  if (command === 'date') {
+    insertDateSyntax()
+    return
+  }
+
+  if (command === 'emphasis') {
+    insertEmphasisSyntax()
+    return
+  }
+
+  if (command === 'page-break') {
+    insertManualPageBreak()
+  }
 }
 
 const copyTextToClipboard = async (text: string) => {
@@ -551,10 +802,14 @@ onMounted(() => {
       markdown(),
       editableCompartment.of(EditorView.editable.of(true)),
       readOnlyCompartment.of(EditorState.readOnly.of(false)),
+      editorViewModeCompartment.of(createEditorViewModeExtension()),
+      renderDecorationsCompartment.of(createRenderDecorationsExtension()),
+      sourcePageBreakDecorations,
       syntaxHighlighting(markdownHighlightStyle),
       EditorView.updateListener.of((update) => {
         if (update.docChanged || update.selectionSet) {
           syncCurrentLineFormat(update.state)
+          syncTextSelection(update.state)
         }
 
         if (!update.docChanged) {
@@ -599,6 +854,85 @@ onMounted(() => {
           fontSize: '14px',
           color: 'var(--color-on-surface-variant)',
         },
+        '&.cm-editor-source .cm-line.cm-md-source-page-break-line': {
+          color: 'var(--color-primary)',
+          fontWeight: '600',
+        },
+        '&.cm-editor-render .cm-content': {
+          fontFamily: 'var(--font-body), "PingFang SC", "Microsoft YaHei", sans-serif',
+          fontSize: '15px',
+          lineHeight: '1.8',
+          color: 'var(--color-on-surface)',
+        },
+        '&.cm-editor-render .cm-line': {
+          paddingTop: '0.12rem',
+          paddingBottom: '0.12rem',
+        },
+        '&.cm-editor-render .cm-line.cm-md-render-heading': {
+          color: 'var(--color-primary)',
+          fontWeight: '700',
+          lineHeight: '1.35',
+        },
+        '&.cm-editor-render .cm-line.cm-md-render-heading-1': {
+          fontSize: '1.7rem',
+        },
+        '&.cm-editor-render .cm-line.cm-md-render-heading-2': {
+          fontSize: '1.35rem',
+        },
+        '&.cm-editor-render .cm-line.cm-md-render-heading-3, &.cm-editor-render .cm-line.cm-md-render-heading-4': {
+          fontSize: '1.1rem',
+        },
+        '&.cm-editor-render .cm-line.cm-md-render-quote': {
+          marginLeft: '0.15rem',
+          paddingLeft: '0.95rem',
+          borderLeft: '3px solid color-mix(in srgb, var(--color-primary) 20%, transparent)',
+          color: 'color-mix(in srgb, var(--color-primary) 74%, var(--color-on-surface-variant) 26%)',
+          fontStyle: 'italic',
+        },
+        '&.cm-editor-render .cm-md-render-list-marker': {
+          display: 'inline-flex',
+          minWidth: '1.45rem',
+          marginRight: '0.15rem',
+          justifyContent: 'center',
+          color: 'var(--color-primary)',
+          fontWeight: '600',
+        },
+        '&.cm-editor-render .cm-md-render-list-marker-ordered': {
+          justifyContent: 'flex-end',
+        },
+        '&.cm-editor-render .cm-md-render-strong': {
+          fontWeight: '700',
+          color: 'var(--color-on-surface)',
+        },
+        '&.cm-editor-render .cm-md-render-emphasis': {
+          fontStyle: 'italic',
+          color: 'var(--color-on-surface)',
+        },
+        '&.cm-editor-render .cm-md-render-link': {
+          color: 'var(--color-primary)',
+          textDecoration: 'underline',
+          textDecorationColor: 'color-mix(in srgb, var(--color-primary) 55%, transparent)',
+        },
+        '&.cm-editor-render .cm-md-render-inline-code': {
+          paddingInline: '0.32rem',
+          paddingBlock: '0.08rem',
+          borderRadius: '0.4rem',
+          backgroundColor: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          color: 'var(--color-on-surface)',
+        },
+        '&.cm-editor-render .cm-line.cm-md-render-page-break-line': {
+          textAlign: 'center',
+        },
+        '&.cm-editor-render .cm-md-render-page-break-chip': {
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--color-primary)',
+          fontSize: '0.75rem',
+          fontWeight: '600',
+          letterSpacing: '0.08em',
+        },
         '&.cm-focused': { outline: 'none' },
         '.cm-gutters': {
           backgroundColor: 'transparent',
@@ -617,6 +951,7 @@ onMounted(() => {
   syncEditorReadOnly()
   syncRecoveryFileName()
   syncCurrentLineFormat(view.state)
+  syncTextSelection(view.state)
 })
 
 onBeforeUnmount(async () => {
@@ -639,17 +974,20 @@ onBeforeUnmount(async () => {
   }
 })
 
-watch(() => store.markdownContent, (newVal) => {
-  if (!view || view.state.doc.toString() === newVal) {
-    return
-  }
+watch(
+  () => store.markdownContent,
+  (newVal) => {
+    if (!view || view.state.doc.toString() === newVal) {
+      return
+    }
 
-  isExternalUpdate = true
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: newVal },
-  })
-  isExternalUpdate = false
-})
+    isExternalUpdate = true
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: newVal },
+    })
+    isExternalUpdate = false
+  },
+)
 
 watch(
   () => store.activeFileStatus,
@@ -673,189 +1011,53 @@ watch(
 </script>
 
 <template>
-  <section class="relative flex h-full flex-col overflow-hidden card-soft ghost-border shadow-ambient">
-    <transition name="fade">
-      <div
-        v-if="!store.activeFilePath"
-        class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-surface-container-lowest/80 backdrop-blur-sm"
-      >
-        <div class="mb-4 rounded-[2rem] border border-white/5 bg-surface-container-high p-8 text-on-surface-variant/40 shadow-inner ring-1 ring-outline-variant/10">
-          <span class="material-symbols-outlined text-4xl">edit_note</span>
-        </div>
-        <p class="text-sm font-semibold tracking-wide text-on-surface">选择或创建一个文件</p>
-        <p class="mt-2 text-[11px] font-medium text-on-surface-variant/60">开始你的简历编辑</p>
-      </div>
-    </transition>
+  <EditorShell
+    v-model:recovery-file-name="recoveryFileName"
+    :has-active-file="hasActiveFile"
+    :has-alternative-files="hasAlternativeFiles"
+    :is-missing-file="isMissingFile"
+    @open-other-file="handleOpenOtherFile"
+    @recover-missing-file="handleRecoverMissingFile"
+  >
+    <template #toolbar>
+      <EditorToolbar
+        :current-line-format="currentLineFormat"
+        :has-active-file="hasActiveFile"
+        :has-copied-markdown="hasCopiedMarkdown"
+        :has-text-selection="hasTextSelection"
+        :is-formatting-disabled="isFormattingDisabled"
+        :is-render-view="isRenderView"
+        @apply-line-format="applyCurrentLineFormat"
+        @copy-markdown="copyMarkdown"
+        @insert-command="handleInsertCommand"
+        @insert-emphasis="insertEmphasisSyntax"
+        @toggle-bold="toggleInlineSyntax('**')"
+        @toggle-italic="toggleInlineSyntax('*')"
+        @toggle-view="toggleEditorView"
+      />
+    </template>
 
-    <transition name="fade">
-      <div
-        v-if="store.activeFilePath && isMissingFile"
-        class="absolute inset-0 z-40 flex items-center justify-center bg-surface-container-lowest/78 backdrop-blur-sm"
-      >
-        <div class="mx-6 w-full max-w-lg rounded-[2rem] bg-surface-container-lowest p-6 shadow-ambient">
-          <div class="flex h-14 w-14 items-center justify-center rounded-[1.5rem] bg-error/10 text-error">
-            <span class="material-symbols-outlined text-[26px]">warning</span>
-          </div>
-          <h3 class="mt-4 text-lg font-semibold text-on-surface">文件已从磁盘删除</h3>
-          <p class="mt-2 text-sm leading-6 text-on-surface-variant">
-            当前编辑内容仍保留在内存中。你可以将它另存为新文件，或者直接打开其他文件。
-          </p>
-
-          <div class="mt-5 flex flex-col gap-3">
-            <input
-              v-model="recoveryFileName"
-              class="w-full rounded-2xl bg-surface-container px-4 py-3 text-sm text-on-surface outline-none transition-shadow focus:shadow-[0_0_0_3px_rgba(76,73,204,0.12)]"
-              placeholder="输入恢复文件名"
-              @keyup.enter="handleRecoverMissingFile"
-            />
-
-            <div class="flex flex-wrap gap-2">
-              <button
-                class="btn-primary !rounded-2xl !px-4 !py-2.5 text-sm"
-                :disabled="!recoveryFileName.trim()"
-                @click="handleRecoverMissingFile"
-              >
-                <span class="material-symbols-outlined text-base">save</span>
-                <span>另存为新文件</span>
-              </button>
-
-              <button
-                class="flex items-center gap-2 rounded-2xl bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="!hasAlternativeFiles"
-                @click="handleOpenOtherFile"
-              >
-                <span class="material-symbols-outlined text-base">folder_open</span>
-                <span>打开其他文件</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </transition>
-
-    <div
-      class="flex h-14 items-center justify-between border-b border-outline-variant/10 bg-surface-container-lowest/50 px-6 backdrop-blur-sm transition-all duration-300 shrink-0"
-      :class="{ 'pointer-events-none opacity-20 grayscale': !store.activeFilePath }"
-    >
-      <div
-        class="flex items-center gap-3 transition-opacity"
-        :class="{ 'pointer-events-none opacity-45': isFormattingDisabled }"
-      >
-        <el-select
-          :model-value="currentLineFormat"
-          size="small"
-          placeholder="文本属性"
-          class="editor-line-format-select"
-          :disabled="isFormattingDisabled"
-          @update:model-value="applyCurrentLineFormat"
-        >
-          <template #label="{ value }">
-            <span class="editor-line-format-current">
-              <span class="material-symbols-outlined text-[18px]">
-                {{ getLineFormatOption(value as LineFormatValue).icon }}
-              </span>
-            </span>
-          </template>
-          <el-option
-            v-for="option in LINE_FORMAT_OPTIONS"
-            :key="option.value"
-            :label="option.label"
-            :value="option.value"
-          >
-            <div class="editor-line-format-option">
-              <span class="material-symbols-outlined text-[18px] text-primary/90">
-                {{ option.icon }}
-              </span>
-              <span>{{ option.label }}</span>
-            </div>
-          </el-option>
-        </el-select>
-        <button @click="toggleInlineSyntax('**')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="加粗">
-          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_bold</span>
-        </button>
-        <button @click="toggleInlineSyntax('*')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="斜体">
-          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_italic</span>
-        </button>
-        <button @click="toggleLinePrefix('- ')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="列表">
-          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_list_bulleted</span>
-        </button>
-        <button @click="toggleLinkSyntax" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="链接">
-          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">link</span>
-        </button>
-        <button @click="insertManualPageBreak" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" :title="`插入分页 ${MANUAL_PAGE_BREAK_MARKER}`">
-          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">insert_page_break</span>
-        </button>
-        <button @click="toggleLinePrefix('> ')" class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low" title="引用">
-          <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">format_quote</span>
-        </button>
-      </div>
-
-      <button
-        @click="copyMarkdown"
-        class="rounded-lg p-2 text-on-surface-variant transition-colors group hover:bg-surface-container-low"
-        :title="hasCopiedMarkdown ? '已复制 Markdown 文本' : '复制 Markdown 文本'"
-      >
-        <span class="material-symbols-outlined text-xl transition-transform group-hover:scale-110">
-          {{ hasCopiedMarkdown ? 'check' : 'content_copy' }}
-        </span>
-      </button>
-    </div>
-
-    <div
-      class="flex-1 w-full overflow-hidden bg-transparent transition-opacity duration-300"
-      :class="{ 'opacity-0': !store.activeFilePath }"
-    >
-      <div ref="editorContainer" class="custom-scrollbar h-full w-full"></div>
-    </div>
-  </section>
+    <div ref="editorContainer" class="custom-scrollbar h-full w-full"></div>
+  </EditorShell>
 </template>
 
-<style scoped>
-.editor-line-format-select {
-  width: 3.5rem;
-}
+<style>
 
-.editor-line-format-select :deep(.el-select__wrapper) {
-  min-height: 2.25rem;
-  border-radius: 999px;
-  padding-inline: 0.625rem 0.5rem;
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 92%, white);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-outline-variant) 22%, transparent);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-}
-
-.editor-line-format-select:hover :deep(.el-select__wrapper),
-.editor-line-format-select.is-focus :deep(.el-select__wrapper) {
-  background-color: var(--color-surface-container-high);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 20%, transparent);
-}
-
-.editor-line-format-select :deep(.el-select__selected-item),
-.editor-line-format-select :deep(.el-select__placeholder) {
+.editor-render-content .manual-page-break {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 0;
+  min-height: 3rem;
+  margin: 1.4rem 0;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface-container-lowest));
+  color: var(--color-primary);
 }
 
-.editor-line-format-select :deep(.el-select__caret) {
-  font-size: 1rem;
-  color: color-mix(in srgb, var(--color-on-surface-variant) 72%, white);
-}
-
-.editor-line-format-current {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-on-surface-variant);
-}
-
-.editor-line-format-option {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
+.editor-render-content .manual-page-break::before {
+  content: "分页符";
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--color-on-surface-variant);
+  letter-spacing: 0.08em;
 }
 </style>
