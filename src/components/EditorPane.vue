@@ -688,11 +688,12 @@ const toggleLinkSyntax = () => {
     return
   }
 
+  const linkText = selectedText || '链接描述'
   view.dispatch({
-    changes: { from, to, insert: `[${selectedText}](url)` },
+    changes: { from, to, insert: `[${linkText}](url)` },
     selection: {
       anchor: from + 1,
-      head: selectedText.length > 0 ? from + 1 + selectedText.length : from + 1,
+      head: from + 1 + linkText.length,
     },
   })
   focusEditor()
@@ -703,7 +704,11 @@ const insertDateSyntax = () => {
 }
 
 const insertEmphasisSyntax = () => {
-  toggleInlineSyntax('**【', '】**')
+  if (hasNonEmptySelection()) {
+    toggleInlineSyntax('**【', '】**')
+  } else {
+    insertWrappedSyntax('**【', '】**', '强调内容')
+  }
 }
 
 const handleInsertCommand = (command: InsertMenuValue) => {

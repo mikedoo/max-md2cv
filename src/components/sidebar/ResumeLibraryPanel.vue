@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { invoke } from '@tauri-apps/api/core'
 import { useResumeStore } from '../../stores/resume'
@@ -17,14 +17,33 @@ const editInputRefs = ref<Record<string, HTMLInputElement | null>>({})
 const deleteDialogVisible = ref(false)
 const fileToDelete = ref<FileItem | null>(null)
 
-const currentPhotoName = computed(() => {
-  const current = store.photoFileList.find((file) => file.path === store.currentPhotoPath)
-  return current?.name ?? ''
-})
-
 const handleFileClick = async (path: string) => {
   await store.openFile(path)
 }
+
+const photoUrls = ref<Record<string, string>>({})
+
+watch(() => store.photoFileList, async (newList) => {
+  const currentUrls = photoUrls.value
+  
+  const newPaths = new Set(newList.map(p => p.path))
+  for (const path of Object.keys(currentUrls)) {
+    if (!newPaths.has(path)) {
+      delete currentUrls[path]
+    }
+  }
+
+  for (const photo of newList) {
+    if (!currentUrls[photo.path]) {
+      try {
+        const dataUrl = await invoke<string>('read_image_as_data_url', { path: photo.path })
+        currentUrls[photo.path] = dataUrl
+      } catch (e) {
+        console.error('Failed to load photo:', e)
+      }
+    }
+  }
+}, { immediate: true, deep: true })
 
 const handlePdfClick = async (path: string) => {
   try {
@@ -39,12 +58,8 @@ const handlePhotoImport = async () => {
   await store.importIdPhoto()
 }
 
-const handlePhotoDelete = async () => {
-  if (!store.currentPhotoPath) {
-    return
-  }
-
-  await store.deletePhoto(store.currentPhotoPath)
+const handlePhotoSelect = async (path: string) => {
+  await store.selectPhoto(path)
 }
 
 const startRename = async (file: FileItem) => {
@@ -383,7 +398,8 @@ const confirmDelete = async () => {
             <p class="text-sm font-medium">请选择工作文件夹以上传证件照</p>
           </div>
 
-          <div v-else class="flex h-full flex-col gap-4">
+          <div v-else class="sidebar-panel-scroll h-full pr-1">
+            <div class="flex flex-col gap-4 pb-2">
             <button
               class="sidebar-accent-surface w-full cursor-pointer rounded-2xl py-2.5 text-sm font-medium shadow-sm transition-all duration-200"
               @click="handlePhotoImport"
@@ -394,46 +410,55 @@ const confirmDelete = async () => {
               </span>
             </button>
 
-            <div class="sidebar-section-card flex-1">
-              <div class="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-[20px] bg-surface-container-lowest">
-                <img
-                  v-if="store.photoBase64"
-                  :src="store.photoBase64"
-                  alt="当前证件照"
-                  class="h-full w-full object-cover"
-                />
-                <div v-else class="px-5 text-center text-on-surface-variant">
-                  <span class="material-symbols-outlined mb-2 block text-3xl">gallery_thumbnail</span>
-                  <p class="text-sm font-medium">当前目录还没有证件照</p>
-                </div>
+            <div v-if="store.photoFileList.length === 0" class="flex flex-col items-center justify-center gap-4 py-8 text-center text-on-surface-variant opacity-70">
+              <div class="flex h-16 w-16 items-center justify-center rounded-full bg-surface-container">
+                <span class="material-symbols-outlined text-3xl">gallery_thumbnail</span>
               </div>
-
-              <div v-if="store.currentPhotoPath" class="mt-3 flex items-center gap-2">
-                <p class="min-w-0 flex-1 truncate text-sm font-medium text-on-surface" :title="currentPhotoName">
-                  {{ currentPhotoName }}
-                </p>
-
-                <el-popconfirm
-                  :title="`确认删除 ${currentPhotoName} 吗？`"
-                  confirm-button-text="删除"
-                  cancel-button-text="取消"
-                  confirm-button-type="danger"
-                  @confirm="handlePhotoDelete"
-                >
-                  <template #reference>
-                    <button
-                      class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-on-surface-variant transition-all duration-200 hover:bg-error/10 hover:text-error"
-                      @click.stop
-                    >
-                      <span class="material-symbols-outlined text-[18px]">delete</span>
-                    </button>
-                  </template>
-                </el-popconfirm>
-              </div>
-
-              <p v-else class="mt-3 text-xs leading-5 text-on-surface-variant">
-                导入后会保存在当前工作文件夹，并按 <code>IDphoto</code>、<code>IDphoto-2</code> 这类名称自动管理。
+              <p class="text-sm font-medium">当前目录还没有证件照</p>
+              <p class="max-w-[200px] text-xs leading-5">
+                导入后会保存在当前工作文件夹，<br/>并按 <code>IDphoto</code> 这类名称自动管理。
               </p>
+            </div>
+
+            <ul v-else class="grid grid-cols-2 gap-3 mt-2">
+              <li v-for="photo in store.photoFileList" :key="photo.path" class="group relative">
+                <div class="flex flex-col gap-1.5 cursor-pointer" @click="handlePhotoSelect(photo.path)">
+                  <div
+                    class="relative aspect-[3/4] w-full overflow-hidden rounded-2xl border-[2px] transition-all duration-200"
+                    :class="photo.path === store.currentPhotoPath ? 'border-[var(--sidebar-accent,var(--color-primary))] shadow-sm' : 'border-black/5 hover:border-black/10 dark:border-white/5 dark:hover:border-white/10'"
+                  >
+                    <img v-if="photoUrls[photo.path]" :src="photoUrls[photo.path]" class="absolute inset-0 h-full w-full bg-surface-container-lowest object-cover transition-transform duration-300 group-hover:scale-105" />
+                    <div v-else class="absolute inset-0 flex h-full w-full flex-col items-center justify-center bg-surface-container-lowest text-on-surface-variant opacity-50">
+                      <span class="material-symbols-outlined mb-1 text-2xl">image</span>
+                    </div>
+                    
+                    <div v-if="photo.path === store.currentPhotoPath" class="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--sidebar-accent,var(--color-primary))] text-white shadow-sm ring-2 ring-white">
+                      <span class="material-symbols-outlined text-[14px]">check</span>
+                    </div>
+
+                    <el-popconfirm
+                      :title="`确认删除 ${photo.name} 吗？`"
+                      confirm-button-text="删除"
+                      cancel-button-text="取消"
+                      confirm-button-type="danger"
+                      @confirm="store.deletePhoto(photo.path)"
+                    >
+                      <template #reference>
+                        <button
+                          class="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-lg bg-surface/90 text-on-surface shadow-sm opacity-0 backdrop-blur-sm transition-all duration-200 group-hover:opacity-100 hover:bg-error hover:text-white"
+                          @click.stop
+                        >
+                          <span class="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      </template>
+                    </el-popconfirm>
+                  </div>
+                  <div class="px-1 text-center">
+                    <p class="truncate text-[12px] font-medium text-on-surface/90" :title="photo.name">{{ photo.name }}</p>
+                  </div>
+                </div>
+              </li>
+            </ul>
             </div>
           </div>
         </div>

@@ -316,9 +316,9 @@ function renderTextContactInfo(paragraphs: HTMLParagraphElement[]): string {
   `.trim()
 }
 
-function enhanceContactInfo(html: string, styleConfig: ResumeStyle, templateId?: string): string {
+function enhanceContactInfo(html: string, styleConfig: ResumeStyle, _templateId?: string): string {
   if (typeof document === 'undefined') {
-    return templateId === 'modern' && styleConfig.personalInfoMode === 'icon'
+    return styleConfig.personalInfoMode === 'icon'
       ? enhanceModernContactInfo(html)
       : html
   }
@@ -326,7 +326,7 @@ function enhanceContactInfo(html: string, styleConfig: ResumeStyle, templateId?:
   const container = document.createElement('div')
   container.innerHTML = html
 
-  const isModernIconMode = templateId === 'modern' && styleConfig.personalInfoMode === 'icon'
+  const isIconMode = styleConfig.personalInfoMode === 'icon'
 
   container.querySelectorAll('p.job-intention').forEach((jobIntentionElement) => {
     const paragraphs = collectContactParagraphs(jobIntentionElement)
@@ -335,7 +335,7 @@ function enhanceContactInfo(html: string, styleConfig: ResumeStyle, templateId?:
     }
 
     const replacementHtml = (() => {
-      if (!isModernIconMode) {
+      if (!isIconMode) {
         return renderTextContactInfo(paragraphs)
       }
 

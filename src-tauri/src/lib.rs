@@ -93,6 +93,20 @@ async fn list_templates(app: tauri::AppHandle) -> Result<Vec<TemplateInfo>, Stri
         load_templates_from_dir(&builtin_path, &mut templates)?;
     }
 
+    // 1b. Dev-mode fallback: read directly from source directory when bundled
+    //     resources are missing or incomplete (CARGO_MANIFEST_DIR is only set
+    //     during `cargo run`).
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let dev_source_path = Path::new(&manifest_dir)
+            .parent()
+            .map(|root| root.join("src").join("assets").join("templates"));
+        if let Some(dev_path) = dev_source_path {
+            if dev_path.exists() {
+                load_templates_overriding(&dev_path, &mut templates)?;
+            }
+        }
+    }
+
     // 2. Load user-custom templates (higher priority — overrides built-ins with same id)
     let app_data_dir = app
         .path()

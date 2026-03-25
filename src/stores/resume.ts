@@ -810,7 +810,7 @@ export const useResumeStore = defineStore("resume", () => {
 
     try {
       const selected = await openDialog({
-        multiple: false,
+        multiple: true,
         filters: [
           {
             name: "图片文件",
@@ -819,18 +819,30 @@ export const useResumeStore = defineStore("resume", () => {
         ],
       });
 
-      if (!selected || typeof selected !== "string") {
+      const selectedPaths = Array.isArray(selected)
+        ? selected
+        : typeof selected === "string"
+          ? [selected]
+          : [];
+
+      if (selectedPaths.length === 0) {
         return;
       }
 
-      const imported = await invoke<PhotoItem>("import_id_photo", {
-        sourcePath: selected,
-        workspacePath: workspacePath.value,
-      });
+      const importedEntries: PhotoItem[] = [];
 
-      registerLocalMutation(imported.path);
-      setCurrentPhoto(imported.path, photoBase64.value);
+      for (const sourcePath of selectedPaths) {
+        const imported = await invoke<PhotoItem>("import_id_photo", {
+          sourcePath,
+          workspacePath: workspacePath.value,
+        });
+
+        registerLocalMutation(imported.path);
+        importedEntries.push(imported);
+      }
       await refreshPhotoList(workspacePath.value);
+      const imported = importedEntries[importedEntries.length - 1]!;
+      await selectPhoto(imported.path);
       ElMessage.success(`已导入证件照：${imported.name}`);
     } catch (error) {
       console.error("Failed to import id photo:", error);
@@ -849,7 +861,7 @@ export const useResumeStore = defineStore("resume", () => {
         await loadPhoto(null);
       }
 
-      ElMessage.success("证件照已删除");
+      ElMessage.success("证件照已移至回收站");
     } catch (error) {
       console.error("Failed to delete photo:", error);
       ElMessage.error("删除证件照失败");
@@ -1085,7 +1097,7 @@ export const useResumeStore = defineStore("resume", () => {
         await refreshPdfList(workspacePath.value);
       }
 
-      ElMessage.success("PDF 已删除");
+      ElMessage.success("PDF 已移至回收站");
     } catch (error) {
       console.error("Failed to delete pdf:", error);
       ElMessage.error("删除 PDF 失败");

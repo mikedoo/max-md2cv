@@ -58,8 +58,8 @@ const handleThemeColorHexInput = (event: Event) => {
     <div class="flex items-center gap-2">
       <SoftSelect
         :model-value="store.activeTemplate"
-        width="152px"
-        placeholder="妯℃澘"
+        width="130px"
+        placeholder="模板"
         @update:model-value="handleTemplateChange($event as string)"
       >
         <template #label="{ value }">
