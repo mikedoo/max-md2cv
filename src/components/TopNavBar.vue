@@ -136,11 +136,12 @@ const handleExport = async () => {
       <div class="flex items-center gap-8">
         <button
           v-show="!store.isSidebarOpen"
+          title="展开侧边栏"
           @click="store.isSidebarOpen = true"
           class="group flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl transition-colors hover:bg-surface-variant"
         >
           <span
-            class="material-symbols-outlined text-[20px] text-on-surface transition-colors group-hover:text-primary"
+            class="material-symbols-outlined text-[30px]! text-on-surface transition-colors group-hover:text-primary"
           >
             dock_to_right
           </span>

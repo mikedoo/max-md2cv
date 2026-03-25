@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "max-md2cv-app",
+  "productName": "小简-简历编辑器",
   "version": "0.1.0",
   "identifier": "com.dmx.max-md2cv-app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "max-md2cv-app",
+        "title": "小简-简历编辑器",
         "width": 1200,
         "height": 800,
         "minWidth": 1200,

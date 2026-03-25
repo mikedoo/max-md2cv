@@ -221,6 +221,11 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
   .resume-document blockquote {
     margin-bottom: var(--cv-paragraph-spacing);
   }
+  .resume-document .contact-info-icon .material-symbols-outlined {
+    font-size: 14px;
+    line-height: 1;
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  }
   .resume-document .manual-page-break {
     break-before: page;
     page-break-before: always;

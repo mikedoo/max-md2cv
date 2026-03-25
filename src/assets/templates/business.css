@@ -5,30 +5,31 @@
 }
 
 .resume-document {
+  --cv-theme-color: #0050D1;
   color: #000000;
-  line-height: var(--cv-line-height, 1.5);
-  font-family: var(--cv-font-family, "Microsoft YaHei", "PingFang SC", sans-serif);
+  line-height: 1.5;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   --cv-contact-render: icon;
   position: relative;
 }
 
 .resume-document h1 {
-  font-size: var(--cv-h1-size, 2rem);
+  font-size: 32px;
   font-weight: 900;
   line-height: 1.2;
   letter-spacing: 0.05em;
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
   padding-bottom: 0;
   border: none;
   color: var(--cv-theme-color);
 }
 
 .resume-document h2 {
-  font-size: var(--cv-h2-size, 1.125rem);
+  font-size: 18px;
   font-weight: bold;
-  color: var(--cv-theme-color, #4c49cc);
-  margin-top: 1.5rem;
-  margin-bottom: 1rem;
+  color: var(--cv-theme-color);
+  margin-top: 14px;
+  margin-bottom: 14px;
   letter-spacing: 0.05em;
   text-transform: none;
   display: flex;
@@ -36,32 +37,72 @@
 }
 
 .resume-document h2::before {
-  content: "";
-  display: inline-block;
+  content: "label";
+  /* Default fallback icon */
+  font-family: 'Material Symbols Outlined';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
-  background-color: var(--cv-theme-color, #4c49cc);
+  background-color: var(--cv-theme-color);
+  color: white;
+  font-size: 16px;
+  font-weight: normal;
+  font-style: normal;
   border-radius: 50%;
   margin-right: 12px;
   flex-shrink: 0;
-  background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 14px;
+}
+
+.resume-document h2.section-advantage::before {
+  content: "auto_awesome";
+}
+
+.resume-document h2.section-education::before {
+  content: "school";
+}
+
+.resume-document h2.section-work::before {
+  content: "work";
+}
+
+.resume-document h2.section-project::before {
+  content: "rocket_launch";
+}
+
+.resume-document h2.section-skill::before {
+  content: "build";
+}
+
+.resume-document h2.section-campus::before {
+  content: "local_library";
+}
+
+.resume-document h2.section-hobby::before {
+  content: "palette";
+}
+
+.resume-document h2.section-award::before {
+  content: "workspace_premium";
+}
+
+.resume-document h2.section-other::before {
+  content: "more_horiz";
 }
 
 .resume-document h2::after {
   content: "";
   flex: 1;
-  border-bottom: 1px solid var(--cv-theme-color, #4c49cc);
+  border-bottom: 1px solid var(--cv-theme-color);
   margin-left: 16px;
 }
 
 .resume-document h3 {
-  font-size: var(--cv-h3-size, 1.125rem);
+  font-size: 16px;
   font-weight: bold;
-  margin-top: 0.75rem;
-  margin-bottom: 0.25rem;
+  margin-top: 12px;
+  margin-bottom: 4px;
   color: #000;
 }
 
@@ -76,8 +117,8 @@
 }
 
 .resume-document .experience-date {
-  font-size: var(--cv-date-size, inherit);
-  font-weight: var(--cv-date-weight, bold);
+  font-size: inherit;
+  font-weight: bold;
   color: #000000;
   flex-shrink: 0;
   margin-left: 8px;
@@ -90,33 +131,33 @@
 }
 
 .resume-document h4 {
-  font-size: calc(var(--cv-h3-size, 1.125rem) * 0.9);
+  font-size: 1.1em !important;
   font-weight: bold;
-  margin-top: 0.5rem;
-  margin-bottom: 0.2rem;
+  margin-top: 8px;
+  margin-bottom: 3.2px;
 }
 
 .resume-document ul {
   list-style-type: disc;
-  padding-left: 1.25rem;
-  font-size: var(--cv-font-size, 0.875rem);
-  margin-bottom: 0.75rem;
+  padding-left: 20px;
+  font-size: 14px;
+  margin-bottom: 12px;
 }
 
 .resume-document li {
-  margin-bottom: 0.25rem;
+  margin-bottom: 4px;
 }
 
 .resume-document p {
-  font-size: var(--cv-font-size, 0.875rem);
-  margin-bottom: 0.5rem;
+  font-size: 14px;
+  margin-bottom: 8px;
 }
 
 .resume-document blockquote {
   font-family: inherit;
-  font-size: calc(var(--cv-font-size, 0.875rem) * 0.9);
+  font-size: calc(14px * 0.9);
   color: #4a4a4a;
-  margin: 0 0 0.75rem;
+  margin: 0 0 12px;
 }
 
 .resume-document blockquote p {
@@ -127,40 +168,54 @@
 
 /* Job Intention Title */
 .resume-document .job-intention {
-  font-weight: bold;
-  font-size: 0.95rem;
+  font-weight: normal;
+  font-size: 15.2px;
   line-height: 2;
-  margin-bottom: 1.5rem;
+  margin-bottom: 12px;
   display: inline-block;
   vertical-align: top;
-  width: 44%;
+  width: 30%;
+  padding-right: 0 !important;
   color: var(--cv-theme-color) !important;
 }
 
-/* Detailed Info block */
-.resume-document .job-intention + p {
-  font-size: 0.9rem;
+.resume-document .job-intention .job-intention-item {
+  display: block;
   line-height: 1.8;
-  margin-bottom: 1.5rem;
+}
+
+.resume-document .job-intention .job-intention-item:first-child {
+  font-weight: normal;
+}
+
+.resume-document .job-intention .job-intention-sep {
+  display: none;
+}
+
+/* Detailed Info block */
+.resume-document .job-intention+p {
+  font-size: 14.4px;
+  line-height: 1.8;
+  margin-bottom: 12px;
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 16px;
 }
 
 .resume-document .contact-info--text {
-  font-size: 0.9rem;
+  font-size: 14.4px;
   line-height: 1.8;
   display: inline-block;
   vertical-align: top;
-  width: 55%;
-  margin-bottom: 1.5rem;
+  width: 69%;
+  margin-bottom: 12px;
   padding-right: var(--cv-photo-reserve);
   box-sizing: border-box;
 }
 
 .resume-document .contact-info-text-line {
   max-width: 100%;
-  margin-bottom: 0.35rem;
+  margin-bottom: 5.6px;
 }
 
 .resume-document .contact-info-text-line:last-child {
@@ -168,15 +223,15 @@
 }
 
 .resume-document .contact-info--icon {
-  font-size: 0.9rem;
+  font-size: 14.4px;
   line-height: 1.8;
-  margin-bottom: 1.5rem;
+  margin-bottom: 24px;
   display: inline-grid;
   grid-template-columns: 1fr 1fr;
-  row-gap: 0.6rem;
-  column-gap: 1rem;
+  row-gap: 9.6px;
+  column-gap: 16px;
   vertical-align: top;
-  width: 55%;
+  width: 69%;
   padding-right: var(--cv-photo-reserve);
   box-sizing: border-box;
 }
@@ -184,7 +239,7 @@
 .resume-document .contact-info-item {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 7.2px;
   line-height: 1.6;
 }
 
@@ -197,13 +252,13 @@
 }
 
 .resume-document .contact-info-icon {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 15.2px;
+  height: 15.2px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--cv-theme-color, #4c49cc);
+  color: var(--cv-theme-color);
 }
 
 .resume-document .contact-info-icon svg {

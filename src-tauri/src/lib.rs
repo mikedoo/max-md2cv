@@ -59,6 +59,8 @@ struct ResumeStyleState {
 struct ResumeRenderProfile {
     template_id: String,
     style: ResumeStyleState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    photo_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

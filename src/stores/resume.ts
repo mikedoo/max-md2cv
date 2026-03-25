@@ -15,6 +15,7 @@ import {
   createDefaultResumeStyle,
   parseResumeStyleFromTemplateCss,
 } from "../utils/templateStyle";
+import defaultResumeTemplate from "../assets/templates/default-resume.md?raw";
 
 export interface ResumeTemplate {
   id: string;
@@ -63,6 +64,7 @@ export interface WorkspaceChangedEvent {
 export interface ResumeRenderProfile {
   templateId: string;
   style: ResumeStyle;
+  photoPath?: string;
 }
 
 interface WorkspaceRenderState {
@@ -130,6 +132,11 @@ export const useResumeStore = defineStore("resume", () => {
   const photoBase64 = ref<string | null>(null);
   const editorJumpRequest = ref<EditorJumpRequest | null>(null);
   const editorJumpToken = ref(0);
+  const isTemplateDialogVisible = ref(false);
+
+  const openTemplateDialog = () => {
+    isTemplateDialogVisible.value = true;
+  };
 
   const localMutationTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const queuedWorkspacePaths = new Map<string, string>();
@@ -306,9 +313,27 @@ export const useResumeStore = defineStore("resume", () => {
     );
   };
 
+  const syncActiveFilePhoto = () => {
+    const fileKey = getWorkspaceRelativePath(activeFilePath.value);
+    const profile = fileKey ? renderProfilesByFile.value[fileKey] : null;
+    const boundPath = profile?.photoPath ?? null;
+
+    if (boundPath) {
+      if (boundPath !== currentPhotoPath.value) {
+        void loadPhoto(boundPath);
+      }
+    } else {
+      const fallback = resolveNextPhotoPath(photoFileList.value);
+      if (fallback !== currentPhotoPath.value) {
+        void loadPhoto(fallback);
+      }
+    }
+  };
+
   const syncActiveFileRenderProfile = () => {
     const fileKey = getWorkspaceRelativePath(activeFilePath.value);
     applyRenderProfile(fileKey ? renderProfilesByFile.value[fileKey] : null);
+    syncActiveFilePhoto();
   };
 
   const loadWorkspaceRenderState = async (dirPath: string) => {
@@ -327,6 +352,7 @@ export const useResumeStore = defineStore("resume", () => {
           {
             templateId: profile?.templateId ?? DEFAULT_TEMPLATE_ID,
             style: cloneResumeStyle(profile?.style),
+            photoPath: profile?.photoPath,
           },
         ]),
       );
@@ -363,6 +389,7 @@ export const useResumeStore = defineStore("resume", () => {
       [fileKey]: {
         templateId: activeTemplate.value,
         style: cloneResumeStyle(resumeStyle.value),
+        photoPath: currentPhotoPath.value ?? undefined,
       },
     };
 
@@ -408,6 +435,7 @@ export const useResumeStore = defineStore("resume", () => {
     nextProfiles[newKey] = {
       templateId: profile.templateId,
       style: cloneResumeStyle(profile.style),
+      photoPath: profile.photoPath,
     };
 
     if (mode === "move") {
@@ -797,6 +825,7 @@ export const useResumeStore = defineStore("resume", () => {
 
     try {
       await loadPhoto(path);
+      void persistActiveFileRenderState();
     } catch {
       ElMessage.error("加载证件照失败");
     }
@@ -861,6 +890,8 @@ export const useResumeStore = defineStore("resume", () => {
         await loadPhoto(null);
       }
 
+      void persistActiveFileRenderState();
+
       ElMessage.success("证件照已移至回收站");
     } catch (error) {
       console.error("Failed to delete photo:", error);
@@ -878,7 +909,14 @@ export const useResumeStore = defineStore("resume", () => {
       setWorkspacePath(selectedDir);
       await loadWorkspaceRenderState(selectedDir);
       const files = await refreshWorkspaceLists(selectedDir);
-      await openDefaultFile(files);
+      
+      const hasOnboarded = localStorage.getItem("resume-has-onboarded");
+      if (!hasOnboarded) {
+        localStorage.setItem("resume-has-onboarded", "true");
+        openTemplateDialog();
+      } else {
+        await openDefaultFile(files);
+      }
     } catch (error) {
       console.error("Failed to open dialog:", error);
     }
@@ -1057,6 +1095,46 @@ export const useResumeStore = defineStore("resume", () => {
     } catch (error) {
       console.error("Failed to create file:", error);
       ElMessage.error("创建文件失败");
+    }
+  };
+
+  const createFromTemplate = async (
+    name: string,
+    company: string,
+    position: string,
+  ) => {
+    if (!workspacePath.value) {
+      return;
+    }
+
+    try {
+      const baseName = `${name}-${company}-${position}`;
+      let targetName = `${baseName}.md`;
+      let newPath = await join(workspacePath.value, targetName);
+      let counter = 1;
+
+      while (await ensurePathExists(newPath)) {
+        targetName = `${baseName}(${counter}).md`;
+        newPath = await join(workspacePath.value, targetName);
+        counter++;
+      }
+
+      let content = defaultResumeTemplate;
+      content = content.replace(/^# 姓名/m, `# ${name || "姓名"}`);
+      content = content.replace(
+        /\*\*求职意向：某某岗位\*\*/,
+        `**求职意向：${position || "某某岗位"}**`,
+      );
+
+      registerLocalMutation(newPath);
+      await invoke("write_resume", { path: newPath, content });
+      await refreshFileList(workspacePath.value);
+      await refreshPdfList(workspacePath.value);
+      await openFile(newPath);
+      ElMessage.success("已基于模板创建新文件");
+    } catch (error) {
+      console.error("Failed to create from template:", error);
+      ElMessage.error("基于模板创建失败");
     }
   };
 
@@ -1308,6 +1386,8 @@ export const useResumeStore = defineStore("resume", () => {
     sidebarPrimaryView,
     isSidebarOpen,
     shouldShowWorkspaceDialog,
+    isTemplateDialogVisible,
+    openTemplateDialog,
     currentPhotoPath,
     editorJumpRequest,
     selectWorkspace,
@@ -1319,6 +1399,7 @@ export const useResumeStore = defineStore("resume", () => {
     saveMissingFileAs,
     replaceMarkdownFromOutline,
     createFile,
+    createFromTemplate,
     deleteFile,
     deletePdf,
     renameFile,

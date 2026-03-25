@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { useResumeStore } from '../stores/resume'
 import ResumeLibraryPanel from './sidebar/ResumeLibraryPanel.vue'
 import ResumeOutlinePanel from './sidebar/ResumeOutlinePanel.vue'
@@ -8,6 +8,32 @@ const store = useResumeStore()
 
 const newFileName = ref('')
 const isCreating = ref(false)
+
+const templateForm = reactive({
+  name: '',
+  company: '',
+  position: '',
+})
+
+watch(() => store.isTemplateDialogVisible, (visible) => {
+  if (visible) {
+    templateForm.name = ''
+    templateForm.company = ''
+    templateForm.position = ''
+  }
+})
+
+const handleCreateFromTemplate = async () => {
+  if (!templateForm.name || !templateForm.company || !templateForm.position) {
+    return
+  }
+  await store.createFromTemplate(
+    templateForm.name,
+    templateForm.company,
+    templateForm.position,
+  )
+  store.isTemplateDialogVisible = false
+}
 
 const workspaceDisplayText = computed(() => store.workspacePath || '请选择工作文件夹')
 
@@ -80,45 +106,54 @@ const handleCreateFile = async () => {
       </div>
 
       <div class="flex flex-col gap-3 border-t border-black/5 bg-surface-container-lowest px-6 pb-5 pt-3 shrink-0">
-        <button
-          v-if="store.workspacePath"
-          type="button"
-          class="flex min-h-[1.5rem] w-full cursor-pointer rounded-xl px-2 py-1 text-left text-xs leading-5 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
-          :title="store.workspacePath"
-          @click="handleOpenWorkspaceDirectory"
-        >
-          <span class="break-all">{{ workspaceDisplayText }}</span>
-        </button>
-        <div
-          v-else
-          class="min-h-[1.5rem] break-all px-1 text-xs leading-5 text-on-surface-variant"
-        >
-          {{ workspaceDisplayText }}
-        </div>
+        <template v-if="!isCreating">
+          <button
+            v-if="store.workspacePath"
+            type="button"
+            class="flex min-h-[1.5rem] w-full cursor-pointer rounded-xl px-2 py-1 text-left text-xs leading-5 text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+            :title="store.workspacePath"
+            @click="handleOpenWorkspaceDirectory"
+          >
+            <span class="break-all">{{ workspaceDisplayText }}</span>
+          </button>
+          <div
+            v-else
+            class="min-h-[1.5rem] break-all px-1 text-xs leading-5 text-on-surface-variant"
+          >
+            {{ workspaceDisplayText }}
+          </div>
+        </template>
 
         <transition name="fade">
-          <div
-            v-if="isCreating"
-            class="sidebar-accent-frame flex w-full items-center gap-2 rounded-xl border bg-surface-container px-3 py-2 shadow-sm"
-          >
-            <input
-              v-model="newFileName"
-              autofocus
-              placeholder="输入文件名..."
-              class="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface focus:outline-none"
-              @keyup.enter="handleCreateFile"
-              @keyup.esc="closeCreateFile"
-            />
-            <button
-              class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-surface-variant"
-              @click="closeCreateFile"
-            >
-              <span class="material-symbols-outlined text-sm text-on-surface-variant">close</span>
-            </button>
+          <div v-if="isCreating" class="flex w-full flex-col gap-2">
+            <div class="sidebar-accent-frame flex w-full items-center gap-2 rounded-xl border bg-surface-container px-3 py-2 shadow-sm">
+              <input
+                v-model="newFileName"
+                autofocus
+                placeholder="张三-腾讯-前端工程师"
+                class="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface focus:outline-none"
+                @keyup.enter="handleCreateFile"
+                @keyup.esc="closeCreateFile"
+              />
+            </div>
+            <div class="flex w-full items-center gap-2">
+              <button
+                class="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-surface-container px-3 py-2.5 text-sm font-medium text-on-surface shadow-sm transition-all duration-200 hover:bg-surface-container-highest"
+                @click="closeCreateFile"
+              >
+                <span class="truncate">取消</span>
+              </button>
+              <button
+                class="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2.5 text-sm font-medium text-on-primary shadow-sm transition-all duration-200 hover:bg-primary/90"
+                @click="handleCreateFile"
+              >
+                <span class="truncate">确认</span>
+              </button>
+            </div>
           </div>
         </transition>
 
-        <div class="flex w-full items-center gap-2">
+        <div v-if="!isCreating" class="flex w-full items-center gap-2">
           <button
             class="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-surface-container px-3 py-2.5 text-sm font-medium text-on-surface shadow-sm transition-all duration-200 hover:bg-surface-container-highest"
             @click="handleSelectWorkspace"
@@ -127,18 +162,75 @@ const handleCreateFile = async () => {
             <span class="truncate">更换文件夹</span>
           </button>
 
-          <button
-            v-if="store.workspacePath && !isCreating"
-            class="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-surface-container px-3 py-2.5 text-sm font-medium text-on-surface shadow-sm transition-all duration-200 hover:bg-surface-container-highest"
-            @click="openCreateFile"
+          <el-dropdown
+            v-if="store.workspacePath"
+            trigger="click"
+            class="flex-1 min-w-0"
+            placement="top"
           >
-            <span class="material-symbols-outlined shrink-0 text-lg">add</span>
-            <span class="truncate">新建</span>
-          </button>
+            <button
+              class="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-surface-container px-3 py-2.5 text-sm font-medium text-on-surface shadow-sm transition-all duration-200 hover:bg-surface-container-highest"
+            >
+              <span class="material-symbols-outlined shrink-0 text-lg">add</span>
+              <span class="truncate">新建</span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="openCreateFile">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">draft</span>
+                    <span>新建空白</span>
+                  </div>
+                </el-dropdown-item>
+                <el-dropdown-item @click="store.openTemplateDialog">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">description</span>
+                    <span>从演示模板新建</span>
+                  </div>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
     </div>
   </aside>
+
+  <el-dialog
+    v-model="store.isTemplateDialogVisible"
+    title="从演示模板新建"
+    width="400px"
+    class="resume-dialog"
+    destroy-on-close
+  >
+    <el-form :model="templateForm" label-width="60px" @submit.prevent>
+      <el-form-item label="姓名">
+        <el-input v-model="templateForm.name" placeholder="请输入姓名" />
+      </el-form-item>
+      <el-form-item label="公司">
+        <el-input v-model="templateForm.company" placeholder="请输入公司" />
+      </el-form-item>
+      <el-form-item label="岗位">
+        <el-input
+          v-model="templateForm.position"
+          placeholder="请输入岗位"
+          @keyup.enter="handleCreateFromTemplate"
+        />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <el-button @click="store.isTemplateDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          @click="handleCreateFromTemplate"
+          :disabled="!templateForm.name || !templateForm.company || !templateForm.position"
+        >
+          确定
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>

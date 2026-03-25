@@ -1,6 +1,6 @@
 import { ResumeStyle } from '../stores/resume'
 
-type ContactFieldType = 'phone' | 'email' | 'github' | 'location' | 'age' | 'website' | 'wechat'
+type ContactFieldType = 'phone' | 'email' | 'github' | 'location' | 'age' | 'website' | 'wechat' | 'experience'
 
 interface ContactField {
   type: ContactFieldType
@@ -15,6 +15,32 @@ const CONTACT_FIELD_ALIASES: Record<ContactFieldType, string[]> = {
   age: ['年龄', 'age'],
   website: ['网站', '主页', '博客', 'portfolio', 'website', 'site', 'blog'],
   wechat: ['微信', 'wechat', 'vx'],
+  experience: ['工作经验', '工作经历', '经验', '年限', '工作年限', 'experience', 'exp'],
+}
+
+export interface SectionTypeDef {
+  key: string
+  aliases: string[]
+  emoji: string
+}
+
+export const SECTION_TYPES: SectionTypeDef[] = [
+  { key: 'advantage', aliases: ['个人优势', '优势评述', '自我评价', '个人总结', '个人简介', '个人画像', '个人亮点', '自我介绍', 'about', 'profile', 'summary', 'advantage'], emoji: '✨' },
+  { key: 'education', aliases: ['教育背景', '教育经历', '学历背景', '学历', '学习经历', 'education', 'study'], emoji: '🎓' },
+  { key: 'work', aliases: ['工作经历', '实习经历', '工作经验', '实践经历', '职业经历', '任职经历', 'experience', 'work', 'intern'], emoji: '💼' },
+  { key: 'project', aliases: ['项目经历', '项目经验', '项目实践', '项目案例', '开源贡献', 'project'], emoji: '🚀' },
+  { key: 'skill', aliases: ['技能', '专业技能', '技术能力', '核心技能', '技术栈', '能力清单', '技能特长', '技能清单', '技能概览', '工具', 'skills', 'competence'], emoji: '🛠️' },
+  { key: 'campus', aliases: ['校园经历', '校园实践', '校园活动', '校内经历', '校内实践', '校内活动', '学生工作', '社团经历'], emoji: '🏫' },
+  { key: 'award', aliases: ['荣誉', '奖项', '奖励', '证书', '获得荣誉', '荣誉奖项', '比赛', 'award', 'certificate', 'honor'], emoji: '🏆' },
+  { key: 'hobby', aliases: ['爱好', '兴趣爱好', '兴趣特长'], emoji: '🎨' },
+  { key: 'other', aliases: ['其他经历', '其他经验', '其他信息', '补充经历', '补充信息', '附加经历', '附加信息'], emoji: '🗂️' },
+]
+
+export function resolveSectionType(title: string): SectionTypeDef | null {
+  const normalized = title.replace(/\s+/g, '').toLowerCase()
+  return SECTION_TYPES.find((def) =>
+    def.aliases.some((alias) => normalized.includes(alias.toLowerCase()))
+  ) ?? null
 }
 
 export const REGEX_PATTERNS = {
@@ -136,6 +162,10 @@ function inferContactField(segment: string, parsedItems: ContactField[]): Contac
     return { type: 'age', value: value.replace(/\s+/g, '') }
   }
 
+  if (/^\d+(\.\d+)?[年个月]\s*(工作)?经验?$|^\d+(\.\d+)?年$/.test(value)) {
+    return { type: 'experience', value: value.replace(/\s+/g, '') }
+  }
+
   const githubUrlMatch = value.match(/github\.com\/([A-Za-z0-9-]+)/i)
   if (githubUrlMatch) {
     return { type: 'github', value: githubUrlMatch[1] }
@@ -196,21 +226,16 @@ function renderBootstrapIcon(paths: Array<{ d: string; fillRule?: 'evenodd' }>):
     .join('')}</svg>`
 }
 
+function renderMaterialIcon(name: string): string {
+  return `<span class="material-symbols-outlined" aria-hidden="true">${name}</span>`
+}
+
 function renderContactIcon(type: ContactFieldType): string {
   switch (type) {
     case 'phone':
-      return renderBootstrapIcon([
-        {
-          fillRule: 'evenodd',
-          d: 'M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.68.68 0 0 0 .178.643l2.457 2.457a.68.68 0 0 0 .644.178l2.189-.547a1.75 1.75 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.6 18.6 0 0 1-7.01-4.42 18.6 18.6 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877z',
-        },
-      ])
+      return renderMaterialIcon('call')
     case 'email':
-      return renderBootstrapIcon([
-        {
-          d: 'M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z',
-        },
-      ])
+      return renderMaterialIcon('mail')
     case 'github':
       return renderBootstrapIcon([
         {
@@ -218,35 +243,22 @@ function renderContactIcon(type: ContactFieldType): string {
         },
       ])
     case 'location':
-      return renderBootstrapIcon([
-        {
-          d: 'M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10m0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6',
-        },
-      ])
+      return renderMaterialIcon('location_on')
     case 'age':
-      return renderBootstrapIcon([
-        {
-          d: 'm3.494.013-.595.79A.747.747 0 0 0 3 1.814v2.683q-.224.051-.432.107c-.702.187-1.305.418-1.745.696C.408 5.56 0 5.954 0 6.5v7c0 .546.408.94.823 1.201.44.278 1.043.51 1.745.696C3.978 15.773 5.898 16 8 16s4.022-.227 5.432-.603c.701-.187 1.305-.418 1.745-.696.415-.261.823-.655.823-1.201v-7c0-.546-.408-.94-.823-1.201-.44-.278-1.043-.51-1.745-.696A12 12 0 0 0 13 4.496v-2.69a.747.747 0 0 0 .092-1.004l-.598-.79-.595.792A.747.747 0 0 0 12 1.813V4.3a22 22 0 0 0-2-.23V1.806a.747.747 0 0 0 .092-1.004l-.598-.79-.595.792A.747.747 0 0 0 9 1.813v2.204a29 29 0 0 0-2 0V1.806A.747.747 0 0 0 7.092.802l-.598-.79-.595.792A.747.747 0 0 0 6 1.813V4.07c-.71.05-1.383.129-2 .23V1.806A.747.747 0 0 0 4.092.802zm-.668 5.556L3 5.524v.967q.468.111 1 .201V5.315a21 21 0 0 1 2-.242v1.855q.488.036 1 .054V5.018a28 28 0 0 1 2 0v1.964q.512-.018 1-.054V5.073c.72.054 1.393.137 2 .242v1.377q.532-.09 1-.201v-.967l.175.045c.655.175 1.15.374 1.469.575.344.217.356.35.356.356s-.012.139-.356.356c-.319.2-.814.4-1.47.575C11.87 7.78 10.041 8 8 8c-2.04 0-3.87-.221-5.174-.569-.656-.175-1.151-.374-1.47-.575C1.012 6.639 1 6.506 1 6.5s.012-.139.356-.356c.319-.2.814-.4 1.47-.575M15 7.806v1.027l-.68.907a.94.94 0 0 1-1.17.276 1.94 1.94 0 0 0-2.236.363l-.348.348a1 1 0 0 1-1.307.092l-.06-.044a2 2 0 0 0-2.399 0l-.06.044a1 1 0 0 1-1.306-.092l-.35-.35a1.935 1.935 0 0 0-2.233-.362.935.935 0 0 1-1.168-.277L1 8.82V7.806c.42.232.956.428 1.568.591C3.978 8.773 5.898 9 8 9s4.022-.227 5.432-.603c.612-.163 1.149-.36 1.568-.591m0 2.679V13.5c0 .006-.012.139-.356.355-.319.202-.814.401-1.47.576C11.87 14.78 10.041 15 8 15c-2.04 0-3.87-.221-5.174-.569-.656-.175-1.151-.374-1.47-.575-.344-.217-.356-.35-.356-.356v-3.02a1.935 1.935 0 0 0 2.298.43.935.935 0 0 1 1.08.175l.348.349a2 2 0 0 0 2.615.185l.059-.044a1 1 0 0 1 1.2 0l.06.044a2 2 0 0 0 2.613-.185l.348-.348a.94.94 0 0 1 1.082-.175c.781.39 1.718.208 2.297-.426',
-        },
-      ])
+      return renderMaterialIcon('cake')
     case 'website':
-      return renderBootstrapIcon([
-        {
-          d: 'M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1 1 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4 4 0 0 1-.128-1.287z',
-        },
-        {
-          d: 'M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243z',
-        },
-      ])
+      return renderMaterialIcon('link_2')
     case 'wechat':
       return renderBootstrapIcon([
         {
-          d: 'M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1 1 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4 4 0 0 1-.128-1.287z',
+          d: 'M11.176 14.429c-2.665 0-4.826-1.8-4.826-4.018 0-2.22 2.159-4.02 4.824-4.02S16 8.191 16 10.411c0 1.21-.65 2.301-1.666 3.036a.32.32 0 0 0-.12.366l.218.81a.6.6 0 0 1 .029.117.166.166 0 0 1-.162.162.2.2 0 0 1-.092-.03l-1.057-.61a.5.5 0 0 0-.256-.074.5.5 0 0 0-.142.021 5.7 5.7 0 0 1-1.576.22M9.064 9.542a.647.647 0 1 0 .557-1 .645.645 0 0 0-.646.647.6.6 0 0 0 .09.353Zm3.232.001a.646.646 0 1 0 .546-1 .645.645 0 0 0-.644.644.63.63 0 0 0 .098.356',
         },
         {
-          d: 'M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243z',
+          d: 'M0 6.826c0 1.455.781 2.765 2.001 3.656a.385.385 0 0 1 .143.439l-.161.6-.1.373a.5.5 0 0 0-.032.14.19.19 0 0 0 .193.193q.06 0 .111-.029l1.268-.733a.6.6 0 0 1 .308-.088q.088 0 .171.025a6.8 6.8 0 0 0 1.625.26 4.5 4.5 0 0 1-.177-1.251c0-2.936 2.785-5.02 5.824-5.02l.15.002C10.587 3.429 8.392 2 5.796 2 2.596 2 0 4.16 0 6.826m4.632-1.555a.77.77 0 1 1-1.54 0 .77.77 0 0 1 1.54 0m3.875 0a.77.77 0 1 1-1.54 0 .77.77 0 0 1 1.54 0',
         },
       ])
+    case 'experience':
+      return renderMaterialIcon('work')
   }
 }
 
@@ -256,7 +268,11 @@ function renderContactField(field: ContactField): string {
 
   if (field.type === 'website') {
     const safeHref = escapeHtml(normalizeWebsiteHref(field.value))
-    valueHtml = `<a class="contact-info-value contact-info-link" href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeValue}</a>`
+    const displayValue = field.value
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .replace(/\/$/, '')
+    valueHtml = `<a class="contact-info-value contact-info-link" href="${safeHref}" target="_blank" rel="noopener noreferrer">${escapeHtml(displayValue)}</a>`
   }
 
   if (field.type === 'github') {
@@ -310,8 +326,8 @@ function renderTextContactInfo(paragraphs: HTMLParagraphElement[]): string {
   return `
     <div class="contact-info contact-info--text">
       ${paragraphs
-        .map((paragraph) => `<p class="contact-info-text-line">${paragraph.innerHTML}</p>`)
-        .join('')}
+      .map((paragraph) => `<p class="contact-info-text-line">${paragraph.innerHTML}</p>`)
+      .join('')}
     </div>
   `.trim()
 }
@@ -381,8 +397,19 @@ export function enhanceResumeHtml(rawHtml: string, styleConfig: ResumeStyle, tem
   let html = rawHtml
 
   html = html.replace(
-    /<p>(.*?(?:求职意向|期望职位|应聘职位|求职目标).*?)<\/p>/g,
+    /<p>(.*?(?:求职意向|期望职位|应聘职位|求职目标|意向岗位).*?)<\/p>/g,
     (_match, text) => {
+      const plainText = stripHtml(text)
+      if (plainText.includes('|') || plainText.includes('｜')) {
+        const segments = text
+          .split(/\s*[|｜]\s*/)
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+        const itemsHtml = segments
+          .map((seg: string) => `<span class="job-intention-item">${seg}</span>`)
+          .join('<span class="job-intention-sep">|</span>')
+        return `<p class="job-intention" style="color: ${styleConfig.themeColor};">${itemsHtml}</p>`
+      }
       return `<p class="job-intention" style="color: ${styleConfig.themeColor};">${text}</p>`
     }
   )
@@ -392,17 +419,33 @@ export function enhanceResumeHtml(rawHtml: string, styleConfig: ResumeStyle, tem
   html = html.replace(/<(h[1-6]|p|li)([^>]*)>([\s\S]*?)<\/\1>/g, (match, tag, attrs, content) => {
     if (content.includes('experience-date')) return match
 
+    let finalTag = tag
+    let finalAttrs = attrs
+
+    // Process section headers for h2
+    if (tag === 'h2') {
+      const plainTextTitle = stripHtml(content)
+      const sectionDef = resolveSectionType(plainTextTitle)
+      const sectionClass = sectionDef ? `section-${sectionDef.key}` : 'section-default'
+
+      if (finalAttrs.includes('class="')) {
+        finalAttrs = finalAttrs.replace('class="', `class="${sectionClass} `)
+      } else {
+        finalAttrs = `${finalAttrs} class="${sectionClass}"`
+      }
+    }
+
     const plainText = stripHtml(content).trim()
     const bracketedMatch = plainText.match(DATE_BRACKETED_PATTERN)
     const rangeMatch = bracketedMatch ? null : plainText.match(DATE_RANGE_PATTERN)
-    if (!bracketedMatch && !rangeMatch) return match
+    if (!bracketedMatch && !rangeMatch) return `<${finalTag}${finalAttrs}>${content}</${finalTag}>`
 
     const dateText = bracketedMatch?.[1] ?? rangeMatch?.[1] ?? ''
     const datePattern = bracketedMatch ? DATE_BRACKETED_PATTERN : DATE_RANGE_PATTERN
     const rawCleaned = content.replace(datePattern, '').trim()
     const titleHtml = rawCleaned.replace(/[\s\-|–—:：,，]+$/, '').trim()
 
-    return renderExperienceLine(tag, attrs, titleHtml, dateText)
+    return renderExperienceLine(finalTag, finalAttrs, titleHtml, dateText)
   })
 
   return html
