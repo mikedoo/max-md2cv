@@ -175,7 +175,7 @@
 /* Job Intention Title */
 .resume-document .job-intention {
   font-weight: bold;
-  font-size: 16.8px;
+  font-size: calc(var(--cv-font-size) * 1.1);
   line-height: 1.6;
   margin-bottom: 8px;
   color: var(--cv-theme-color) !important;

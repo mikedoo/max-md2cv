@@ -85,7 +85,7 @@ onMounted(async () => {
     await store.loadTemplates()
   }
   await waitForStablePreviewLayout()
-  schedulePreviewRender(store.markdownContent)
+  debouncedRender(store.markdownContent)
 
   if (previewContainer.value) {
     previewContainer.value.addEventListener('click', (e) => {
@@ -234,7 +234,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     text-align: right;
     white-space: nowrap;
   }
-  .resume-document p,
+  .resume-document p:not(.job-intention),
   .resume-document ul,
   .resume-document ol,
   .resume-document .job-intention + p,

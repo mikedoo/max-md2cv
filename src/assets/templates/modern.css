@@ -104,12 +104,27 @@
   color: inherit;
 }
 
+/* Personal Header Container - Unified flow */
+.resume-document .personal-header {
+  display: block;
+}
+
 /* Job Intention Title */
 .resume-document .job-intention {
   font-weight: bold;
-  font-size: 16.8px;
+  font-size: calc(var(--cv-font-size) * 1.1);
   line-height: 1.6;
   margin-bottom: 8px;
+}
+
+.resume-document .job-intention .job-intention-item {
+  display: inline;
+}
+
+.resume-document .job-intention .job-intention-sep {
+  display: inline;
+  margin: 0 8px;
+  color: #ccc;
 }
 
 /* Fix contact icons to dark grey for modern template */
@@ -128,11 +143,11 @@
 }
 
 .resume-document .contact-info--text {
-  font-size: 13.6px;
-  line-height: 1.6;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 24px;
+  font-size: 14.4px;
+  line-height: 1.8;
+  margin-bottom: 12px;
+  padding-right: var(--cv-photo-reserve);
+  box-sizing: border-box;
 }
 
 .resume-document .contact-info-text-line {
