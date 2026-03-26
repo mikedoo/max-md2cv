@@ -123,7 +123,14 @@ const handleExport = async () => {
     ElMessage.success(`导出成功：${targetPdfName}`)
   } catch (error: any) {
     console.error('导出失败:', error)
-    ElMessage.error(`导出失败: ${error}`)
+    // If the error is from Rust, it will be a string. 
+    // If it's a desktop-side error, we present it as is.
+    const errorMsg = typeof error === 'string' ? error : (error.message || JSON.stringify(error))
+    ElMessage.error({
+      message: `导出失败: ${errorMsg}`,
+      duration: 5000,
+      showClose: true
+    })
   } finally {
     store.isExporting = false
   }

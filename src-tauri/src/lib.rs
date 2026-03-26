@@ -306,6 +306,21 @@ async fn export_pdf_command(html_content: String, output_path: String) -> Result
     let temp_dir = std::env::temp_dir();
     let temp_html_path = temp_dir.join("max_md2cv_temp.html");
 
+    // Pre-check: if output_path exists, try to open it for writing to ensure it's not locked
+    let out_path = Path::new(&output_path);
+    if out_path.exists() {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(out_path)
+            .map_err(|e| {
+                if cfg!(target_os = "windows") && e.kind() == std::io::ErrorKind::PermissionDenied {
+                    "无法覆盖导出文件。请检查该 PDF 文件是否已被其他程序（如 PDF 查看器、浏览器）打开并锁定，关闭后再试。".to_string()
+                } else {
+                    format!("无法写入: {}", e)
+                }
+            })?;
+    }
+
     let mut file = File::create(&temp_html_path).map_err(|e| e.to_string())?;
     file.write_all(html_content.as_bytes()).map_err(|e| e.to_string())?;
 

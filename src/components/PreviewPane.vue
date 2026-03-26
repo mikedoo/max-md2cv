@@ -93,7 +93,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     ${cvStyle.dateWeight ? `--cv-date-weight: ${cvStyle.dateWeight};` : ''}
     ${cvStyle.dateSize ? `--cv-date-size: ${cvStyle.dateSize}px;` : ''}
   }
-  .resume-document > .resume-photo-wrapper {
+  .resume-document .resume-photo-wrapper {
     position: absolute !important;
     top: 0;
     right: 0;
@@ -108,7 +108,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     z-index: 10;
     transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
   }
-  .resume-document > .resume-photo-wrapper.is-empty {
+  .resume-document .resume-photo-wrapper.is-empty {
     background-color: #f8f9fa;
     border: 1px dashed #ced4da;
     border-radius: var(--cv-photo-radius);
@@ -118,7 +118,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     border-color: ${cvStyle.themeColor};
     background-color: color-mix(in srgb, ${cvStyle.themeColor} 5%, #f8f9fa);
   }
-  .resume-document > .resume-photo-wrapper.has-photo {
+  .resume-document .resume-photo-wrapper.has-photo {
     background: transparent;
     border: none;
     border-radius: 0;
@@ -130,7 +130,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     border: none;
     box-shadow: none;
   }
-  .resume-document > .resume-photo-wrapper img {
+  .resume-document .resume-photo-wrapper img {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -142,7 +142,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     clip-path: none !important;
     background: transparent;
   }
-  .resume-document > .resume-photo-wrapper.has-photo img {
+  .resume-document .resume-photo-wrapper.has-photo img {
     position: absolute;
     inset: 0;
   }
@@ -160,9 +160,7 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     padding: 12px;
     box-sizing: border-box;
   }
-  .resume-document > .resume-photo-wrapper + *,
-  .resume-document > .resume-photo-wrapper + * + *,
-  .resume-document > .resume-photo-wrapper + * + * + * {
+  .resume-document .dodge-photo:not(h2) {
     padding-right: var(--cv-photo-reserve) !important;
     box-sizing: border-box;
   }
@@ -323,8 +321,18 @@ const renderPdfPreview = async (request: PreviewRenderRequest) => {
 
   const sourceDiv = document.createElement('div')
   sourceDiv.innerHTML = `<div class="resume-document">${photoHtml}${finalHtml}</div>`
+  
+  // Add photo classes and dodging logic
   const photoWrapper = sourceDiv.querySelector('.resume-photo-wrapper')
-  photoWrapper?.classList.add(request.photoBase64 ? 'has-photo' : 'is-empty')
+  if (photoWrapper) {
+    photoWrapper.classList.add(request.photoBase64 ? 'has-photo' : 'is-empty')
+    // Mark siblings to dodge the photo area effectively even after DOM restructuring
+    let sibling = photoWrapper.nextElementSibling
+    for (let i = 0; i < 3 && sibling; i++) {
+        sibling.classList.add('dodge-photo')
+        sibling = sibling.nextElementSibling
+    }
+  }
 
   paged = new Previewer()
 
