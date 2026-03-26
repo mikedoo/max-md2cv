@@ -4,7 +4,7 @@ import { Previewer } from 'pagedjs'
 import { useResumeStore, type ResumeStyle } from '../stores/resume'
 import { useDebounceFn } from '@vueuse/core'
 import { enhanceResumeHtml, resolveSectionType } from '../utils/resumeParser'
-import { pingFangFontFaceCss } from '../utils/fontAssets'
+import { ensurePreviewFontsReady, pingFangFontFaceCss } from '../utils/fontAssets'
 import { renderMarkdownToHtml } from '../utils/markdownRender'
 import PreviewToolbar from './preview/PreviewToolbar.vue'
 
@@ -14,6 +14,37 @@ const previewScrollContainer = ref<HTMLElement | null>(null)
 let paged: any = null
 let activeRenderPromise: Promise<void> | null = null
 let pendingRenderRequest: PreviewRenderRequest | null = null
+
+const waitForNextPaint = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve())
+  })
+
+const getPreviewLayoutWidth = () =>
+  previewScrollContainer.value?.clientWidth
+  ?? Math.round(previewContainer.value?.getBoundingClientRect().width ?? 0)
+
+const waitForStablePreviewLayout = async (stableFrameTarget = 3) => {
+  let stableFrames = 0
+  let lastWidth = -1
+
+  while (stableFrames < stableFrameTarget) {
+    await waitForNextPaint()
+    const currentWidth = getPreviewLayoutWidth()
+
+    if (!currentWidth) {
+      stableFrames = 0
+      continue
+    }
+
+    if (Math.abs(currentWidth - lastWidth) < 1) {
+      stableFrames += 1
+    } else {
+      lastWidth = currentWidth
+      stableFrames = 0
+    }
+  }
+}
 
 const zoomLevel = ref(100)
 const zoomIn = () => { if (zoomLevel.value < 200) zoomLevel.value += 10 }
@@ -50,7 +81,10 @@ const createPreviewStagingContainer = () => {
 }
 
 onMounted(async () => {
-  await store.loadTemplates()
+  if (!store.templatesLoaded) {
+    await store.loadTemplates()
+  }
+  await waitForStablePreviewLayout()
   schedulePreviewRender(store.markdownContent)
 
   if (previewContainer.value) {
@@ -304,6 +338,8 @@ const renderPdfPreview = async (request: PreviewRenderRequest) => {
 
   const htmlContent = await renderMarkdownToHtml(request.markdownText)
   const cvStyle = request.cvStyle
+  await ensurePreviewFontsReady(cvStyle.fontFamily, cvStyle.fontSize)
+  await waitForStablePreviewLayout()
 
   const injectCss = buildPreviewStyles(cvStyle)
   const stylesheetSources = [
@@ -391,6 +427,10 @@ const renderPdfPreview = async (request: PreviewRenderRequest) => {
 }
 
 const schedulePreviewRender = (markdownText: string) => {
+  if (!store.templatesLoaded) {
+    return null
+  }
+
   pendingRenderRequest = createPreviewRenderRequest(markdownText)
 
   if (activeRenderPromise) {
