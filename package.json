@@ -3,10 +3,17 @@
   "private": true,
   "version": "0.1.1",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "dev:web": "npm run dev --workspace @max-md2cv/web",
+    "build:web": "npm run build --workspace @max-md2cv/web",
+    "preview:web": "npm run preview --workspace @max-md2cv/web",
     "tauri": "tauri"
   },
   "dependencies": {

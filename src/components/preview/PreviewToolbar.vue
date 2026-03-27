@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import SoftSelect from '../shared/SoftSelect.vue'
-import { useResumeStore } from '../../stores/resume'
+import { useResumeStore } from '@resume-store'
 
 defineProps<{
   zoomLevel: number

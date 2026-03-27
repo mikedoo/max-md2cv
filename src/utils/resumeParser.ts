@@ -1,4 +1,4 @@
-import { ResumeStyle } from '../stores/resume'
+import type { ResumeStyle } from '@resume-core'
 
 type ContactFieldType = 'phone' | 'email' | 'github' | 'location' | 'age' | 'website' | 'wechat' | 'experience'
 

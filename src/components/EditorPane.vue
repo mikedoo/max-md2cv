@@ -10,7 +10,7 @@ import { ElMessage } from 'element-plus'
 import EditorShell from './editor/EditorShell.vue'
 import EditorToolbar from './editor/EditorToolbar.vue'
 import { type InsertMenuValue, type LineFormatValue } from './editor/toolbarOptions'
-import { useResumeStore } from '../stores/resume'
+import { useResumeStore } from '@resume-store'
 import { MANUAL_PAGE_BREAK_MARKER } from '../utils/manualPageBreak'
 
 const editorContainer = ref<HTMLElement | null>(null)

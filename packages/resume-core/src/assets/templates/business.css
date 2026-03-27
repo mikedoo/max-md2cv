@@ -1,0 +1,248 @@
+/* @name: 商务专业 */
+
+@page {
+  margin: 10mm 12mm;
+}
+
+.resume-document {
+  --cv-theme-color: #0050D1;
+  color: #000000;
+  line-height: 1.5;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  --cv-contact-render: icon;
+  position: relative;
+}
+
+.resume-document h1 {
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  padding-bottom: 0;
+  border: none;
+  color: var(--cv-theme-color);
+}
+
+.resume-document h2 {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--cv-theme-color);
+  margin-top: 14px;
+  margin-bottom: 14px;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  display: flex;
+  align-items: center;
+  padding-right: 0 !important;
+}
+
+.resume-document h2::before {
+  content: "label";
+  /* Default fallback icon */
+  font-family: 'Material Symbols Outlined';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background-color: var(--cv-theme-color);
+  color: white;
+  font-size: 16px;
+  font-weight: normal;
+  font-style: normal;
+  border-radius: 50%;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.resume-document h2.section-advantage::before {
+  content: "auto_awesome";
+}
+
+.resume-document h2.section-education::before {
+  content: "school";
+}
+
+.resume-document h2.section-work::before {
+  content: "work";
+}
+
+.resume-document h2.section-project::before {
+  content: "rocket_launch";
+}
+
+.resume-document h2.section-skill::before {
+  content: "build";
+}
+
+.resume-document h2.section-campus::before {
+  content: "local_library";
+}
+
+.resume-document h2.section-hobby::before {
+  content: "palette";
+}
+
+.resume-document h2.section-award::before {
+  content: "workspace_premium";
+}
+
+.resume-document h2.section-other::before {
+  content: "more_horiz";
+}
+
+.resume-document h2::after {
+  content: "";
+  flex: 1;
+  border-bottom: 1px solid var(--cv-theme-color);
+  margin-left: 16px;
+}
+
+.resume-document h3 {
+  font-size: 16px;
+  font-weight: bold;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  color: #000;
+}
+
+.resume-document .experience-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.resume-document h3.experience-line {
+  align-items: flex-end;
+}
+
+.resume-document .experience-date {
+  font-size: inherit;
+  font-weight: bold;
+  color: #000000;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.resume-document h3 em {
+  font-style: normal;
+  font-size: 0.85em;
+  font-weight: normal;
+}
+
+.resume-document h4 {
+  font-size: 1.1em !important;
+  font-weight: bold;
+  margin-top: 8px;
+  margin-bottom: 3.2px;
+}
+
+.resume-document ul {
+  list-style-type: disc;
+  padding-left: 20px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.resume-document li {
+  margin-bottom: 4px;
+}
+
+.resume-document p {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.resume-document blockquote {
+  font-family: inherit;
+  font-size: calc(14px * 0.9);
+  color: #4a4a4a;
+  margin: 0 0 12px;
+}
+
+.resume-document blockquote p {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Personal Header Container - Unified flow */
+.resume-document .personal-header {
+  display: block;
+}
+
+/* Job Intention Title */
+.resume-document .job-intention {
+  font-weight: bold;
+  font-size: calc(var(--cv-font-size) * 1.1);
+  line-height: 1.6;
+  margin-bottom: 8px;
+  color: var(--cv-theme-color) !important;
+}
+
+.resume-document .job-intention .job-intention-item {
+  display: inline;
+}
+
+.resume-document .job-intention .job-intention-sep {
+  display: inline;
+  margin: 0 8px;
+  color: #ccc;
+}
+
+/* Detailed Info block */
+.resume-document .job-intention+p {
+  font-size: 13.6px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.resume-document .contact-info--text {
+  font-size: 14.4px;
+  line-height: 1.8;
+  margin-bottom: 12px;
+  padding-right: var(--cv-photo-reserve);
+  box-sizing: border-box;
+}
+
+.resume-document .contact-info-text-line {
+  max-width: 100%;
+  margin-bottom: 5.6px;
+}
+
+.resume-document .contact-info-text-line:last-child {
+  margin-bottom: 0;
+}
+
+.resume-document .contact-info--icon {
+  font-size: 13.6px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9.6px 16px;
+}
+
+.resume-document .contact-info-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7.2px;
+  line-height: 1.6;
+}
+
+.resume-document .contact-info-item::before {
+  background-color: #222222 !important;
+}
+
+.resume-document .contact-info-link,
+.resume-document .contact-info-link:visited {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.14em;
+}

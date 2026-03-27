@@ -1,22 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useResumeStore } from '../stores/resume'
-import { invoke } from '@tauri-apps/api/core'
-import { join } from '@tauri-apps/api/path'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import 'element-plus/es/components/message/style/css'
-import 'element-plus/es/components/message-box/style/css'
-import { buildSelfContainedExportStyles } from '../utils/exportStyles'
-import { getInlinePingFangFontFaceCss } from '../utils/fontAssets'
+import { useResumeStore } from '@resume-store'
 
 const store = useResumeStore()
 
 const currentFileName = computed(() => {
-  if (!store.activeFilePath) {
-    return ''
-  }
-
-  return store.activeFilePath.split(/[/\\]/).pop()?.replace(/\.md$/, '') ?? ''
+  return store.activeFileName ?? ''
 })
 
 const currentFileStatusLabel = computed(() => {
@@ -32,106 +21,7 @@ const currentFileStatusLabel = computed(() => {
 })
 
 const handleExport = async () => {
-  if (!store.activeFilePath || !store.workspacePath) {
-    ElMessage.error('未找到当前打开的文件或工作区')
-    return
-  }
-
-  store.isExporting = true
-  try {
-    const fileNameWithExt = store.activeFilePath.split(/[/\\]/).pop() || '简历.md'
-    const documentTitle = fileNameWithExt.replace(/\.[^/.]+$/, '')
-    const targetPdfName = `${documentTitle}.pdf`
-    const targetPdfPath = await join(store.workspacePath, targetPdfName)
-
-    const exists = store.pdfFileList.some((file) => file.name === targetPdfName)
-    if (exists) {
-      try {
-        await ElMessageBox.confirm(
-          `工作区已存在名为 "${targetPdfName}" 的文件，是否覆盖？`,
-          '导出确认',
-          {
-            confirmButtonText: '覆盖',
-            cancelButtonText: '取消',
-            type: 'warning',
-          },
-        )
-      } catch {
-        store.isExporting = false
-        return
-      }
-    }
-
-    const pagesContainer = document.querySelector('.pagedjs_pages')
-    if (!pagesContainer) {
-      throw new Error('预览内容尚未准备好，请稍后重试。')
-    }
-
-    const styles = await buildSelfContainedExportStyles()
-    const inlinePingFangFontFaceCss = await getInlinePingFangFontFaceCss()
-
-    const exportedPagesContainer = pagesContainer.cloneNode(true) as HTMLElement
-    if (!exportedPagesContainer.style.getPropertyValue('--pagedjs-page-count')) {
-      exportedPagesContainer.style.setProperty(
-        '--pagedjs-page-count',
-        String(exportedPagesContainer.querySelectorAll('.pagedjs_page').length),
-      )
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html class="light" lang="zh-CN">
-      <head>
-        <meta charset="utf-8">
-        <title>${documentTitle}</title>
-        ${styles}
-        <style>
-          ${inlinePingFangFontFaceCss}
-          body {
-            background: white !important;
-            margin: 0;
-            padding: 0;
-          }
-          .pagedjs-wrapper {
-            width: 100% !important;
-            align-items: flex-start !important;
-          }
-          .pagedjs_pages {
-            display: block !important;
-          }
-          .pagedjs_page {
-            box-shadow: none !important;
-          }
-        </style>
-      </head>
-      <body class="resume-document">
-        <div class="pagedjs-wrapper">
-          ${exportedPagesContainer.outerHTML}
-        </div>
-      </body>
-      </html>
-    `
-
-    await invoke('export_pdf_command', { htmlContent, outputPath: targetPdfPath })
-
-    if (store.workspacePath) {
-      await store.refreshPdfList(store.workspacePath)
-    }
-
-    ElMessage.success(`导出成功：${targetPdfName}`)
-  } catch (error: any) {
-    console.error('导出失败:', error)
-    // If the error is from Rust, it will be a string. 
-    // If it's a desktop-side error, we present it as is.
-    const errorMsg = typeof error === 'string' ? error : (error.message || JSON.stringify(error))
-    ElMessage.error({
-      message: `导出失败: ${errorMsg}`,
-      duration: 5000,
-      showClose: true
-    })
-  } finally {
-    store.isExporting = false
-  }
+  await store.exportCurrentPdf()
 }
 </script>
 

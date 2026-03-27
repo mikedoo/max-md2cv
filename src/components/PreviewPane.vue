@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { Previewer } from 'pagedjs'
-import { useResumeStore, type ResumeStyle } from '../stores/resume'
+import { useResumeStore } from '@resume-store'
 import { useDebounceFn } from '@vueuse/core'
 import { enhanceResumeHtml, resolveSectionType } from '../utils/resumeParser'
 import { ensurePreviewFontsReady, pingFangFontFaceCss } from '../utils/fontAssets'
 import { renderMarkdownToHtml } from '../utils/markdownRender'
 import PreviewToolbar from './preview/PreviewToolbar.vue'
+import type { ResumeStyle } from '@resume-core'
 
 const store = useResumeStore()
 const previewContainer = ref<HTMLElement | null>(null)

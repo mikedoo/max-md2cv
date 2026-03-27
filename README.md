@@ -47,6 +47,16 @@ Max-MD2CV（小简）是依托现代前端架构、Rust 桌面环境打造的纯
 
 ```text
 max-md2cv/
+├── apps/
+│   └── web/                         # Web Playground 子应用
+│       ├── src/
+│       ├── index.html
+│       ├── package.json
+│       ├── tsconfig.json
+│       └── vite.config.ts
+├── packages/
+│   └── resume-core/                # Web / Desktop 共享的纯前端核心
+│       └── src/
 ├── src-tauri/                         # Rust 后端与 Tauri 桌面壳
 │   ├── src/                           # Tauri 命令与应用入口
 │   │   ├── lib.rs
@@ -98,13 +108,27 @@ max-md2cv/
 npm install
 ```
 
-### 2. 启动开发模式 (Tauri Dev)
-这将会同时启动 Vite 热更替服务器，并利用 Cargo 编译 Rust 壳。
+### 2. 启动桌面端开发模式 (Tauri Dev)
+这将会同时启动 Vite 热更新服务器，并利用 Cargo 编译 Rust 桌面壳。
 ```bash
 npm run tauri dev
 ```
 
-### 3. 构建生产包
+### 3. 启动 Web Playground 开发服务器
+如果只需要调试 Web 端，不需要启动 Rust/Tauri，直接运行：
+```bash
+npm run dev:web
+```
+
+默认会启动 `apps/web` 下的 Vite 开发服务器，访问终端输出的本地地址即可，当前固定端口为 `4173`。
+
+Web 端常用命令：
+```bash
+npm run build:web
+npm run preview:web
+```
+
+### 4. 构建桌面端生产包
 当应用开发完毕后，可执行打包命令生成对应平台的独立安装包：
 ```bash
 npm run tauri build

@@ -1,4 +1,4 @@
-import type { ResumeStyle } from "../stores/resume";
+import type { ResumeStyle } from "@resume-core";
 
 const DEFAULT_THEME_COLOR = "#4c49cc";
 const DEFAULT_FONT_FAMILY = '"PingFang SC", "Microsoft YaHei", sans-serif';
