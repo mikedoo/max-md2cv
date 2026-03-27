@@ -1,6 +1,11 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { usePlaygroundStore } from "./playground";
+import {
+  parseMarkdownOutline,
+  reorderOutlineSiblings,
+  type ResumeOutlineNode,
+} from "@desktop/utils/markdownOutline";
 
 interface FileItem {
   name: string;
@@ -44,7 +49,7 @@ export const useResumeStore = defineStore("resume", () => {
   const isExporting = ref(false);
   const activeFileStatus = ref<ActiveFileStatus>("ready");
   const isDirty = ref(false);
-  const isSidebarOpen = ref(true);
+  const isSidebarOpen = ref(false);
   const sidebarPrimaryView = ref<"library" | "outline">("outline");
   const shouldShowWorkspaceDialog = ref(false);
   const isTemplateDialogVisible = ref(false);
@@ -75,6 +80,8 @@ export const useResumeStore = defineStore("resume", () => {
 
   const activeFilePath = computed(() => WEB_FILE_PATH);
   const activeFileName = computed(() => buildDisplayNameFromMarkdown(playground.markdown));
+  const outlineResult = computed(() => parseMarkdownOutline(playground.markdown));
+  const outlineTree = computed<ResumeOutlineNode[]>(() => outlineResult.value.tree);
 
   const currentPhotoPath = computed(() => {
     return playground.photoBase64 ? "web-photo" : null;
@@ -153,9 +160,14 @@ export const useResumeStore = defineStore("resume", () => {
     await saveCurrentFile(true);
   };
 
-  const requestEditorJump = (line: number) => {
+  const requestEditorJump = (nodeId: string) => {
+    const targetNode = outlineResult.value.nodesById.get(nodeId);
+    if (!targetNode) {
+      return;
+    }
+
     editorJumpRequest.value = {
-      line,
+      line: targetNode.startLine,
       token: ++editorJumpToken.value,
     };
   };
@@ -167,6 +179,29 @@ export const useResumeStore = defineStore("resume", () => {
   const resetDraft = () => {
     playground.resetDraft();
     isDirty.value = false;
+  };
+
+  const moveOutlineNode = async (
+    nodeId: string,
+    targetIndex: number,
+    parentId: string | null,
+  ) => {
+    if (activeFileStatus.value !== "ready") {
+      return;
+    }
+
+    const nextMarkdown = reorderOutlineSiblings(
+      playground.markdown,
+      nodeId,
+      targetIndex,
+      parentId,
+    );
+
+    if (nextMarkdown === playground.markdown) {
+      return;
+    }
+
+    await replaceMarkdownFromOutline(nextMarkdown);
   };
 
   return {
@@ -186,7 +221,7 @@ export const useResumeStore = defineStore("resume", () => {
     activeFileName,
     isDirty,
     pendingLocalMutationPaths: computed(() => [] as string[]),
-    outlineTree: computed(() => []),
+    outlineTree,
     sidebarPrimaryView,
     isSidebarOpen,
     shouldShowWorkspaceDialog,
@@ -220,7 +255,7 @@ export const useResumeStore = defineStore("resume", () => {
     selectPhoto,
     importIdPhoto,
     deletePhoto,
-    moveOutlineNode: async () => undefined,
+    moveOutlineNode,
     requestEditorJump,
     clearEditorJumpRequest,
     openTemplateDialog: () => {

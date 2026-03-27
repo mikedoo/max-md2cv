@@ -1,32 +1,35 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useResumeStore } from '@resume-store'
+import { computed } from "vue";
+import { useResumeStore } from "@resume-store";
 
-const store = useResumeStore()
+const WEB_RELEASES_URL = "https://github.com/max-doo/max-md2cv/releases";
+const WEB_REPOSITORY_URL = "https://github.com/max-doo/max-md2cv";
+
+const store = useResumeStore();
 
 const currentFileName = computed(() => {
-  return store.activeFileName ?? ''
-})
+  return store.activeFileName ?? "";
+});
 
 const currentFileStatusLabel = computed(() => {
-  if (store.activeFileStatus === 'missing') {
-    return '已删除'
+  if (store.activeFileStatus === "missing") {
+    return "已删除";
   }
 
-  if (store.activeFileStatus === 'conflict') {
-    return '有冲突'
+  if (store.activeFileStatus === "conflict") {
+    return "有冲突";
   }
 
-  return ''
-})
+  return "";
+});
 
 const handleExport = async () => {
-  await store.exportCurrentPdf()
-}
+  await store.exportCurrentPdf();
+};
 </script>
 
 <template>
-  <nav class="z-50 w-full shrink-0 bg-transparent font-['Manrope'] text-sm font-medium tracking-wide antialiased">
+  <nav class="web-topbar z-50 w-full shrink-0 bg-transparent font-['Manrope'] text-sm font-medium tracking-wide antialiased">
     <div class="flex h-16 min-w-0 items-center justify-between gap-6 px-8">
       <div class="flex min-w-0 flex-1 items-center gap-4">
         <button
@@ -59,14 +62,45 @@ const handleExport = async () => {
         </div>
       </div>
 
-      <div class="flex shrink-0 items-center gap-4">
+      <div class="flex shrink-0 items-center gap-3 whitespace-nowrap">
+        <a
+          :href="WEB_RELEASES_URL"
+          target="_blank"
+          rel="noreferrer"
+          class="web-topbar-secondary-action"
+        >
+          <span class="material-symbols-outlined text-[18px]">install_desktop</span>
+          <span>下载安装包</span>
+        </a>
+
+        <a
+          :href="WEB_REPOSITORY_URL"
+          target="_blank"
+          rel="noreferrer"
+          class="web-topbar-secondary-action"
+        >
+          <span class="material-symbols-outlined text-[18px]">code</span>
+          <span>GitHub 仓库</span>
+        </a>
+
         <button
           @click="handleExport"
           :disabled="store.isExporting"
           class="btn-primary shrink-0"
         >
-          <span v-if="store.isExporting" class="material-symbols-outlined animate-spin text-base">refresh</span>
-          <span v-else class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1;">download</span>
+          <span
+            v-if="store.isExporting"
+            class="material-symbols-outlined animate-spin text-base"
+          >
+            refresh
+          </span>
+          <span
+            v-else
+            class="material-symbols-outlined text-base"
+            style="font-variation-settings: 'FILL' 1;"
+          >
+            download
+          </span>
           <span>导出为 PDF</span>
         </button>
       </div>

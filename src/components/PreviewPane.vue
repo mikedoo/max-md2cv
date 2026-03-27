@@ -491,7 +491,7 @@ watch(() => store.resumeStyle, () => {
 
     <!-- Footer -->
     <div class="h-10 shrink-0 flex items-center px-5 justify-between bg-surface-container-high/30 backdrop-blur-sm border-t border-outline-variant/10">
-      <!-- Left: Reset + Save -->
+      <!-- Left: Reset -->
       <div class="flex items-center gap-3">
         <button
           @click="store.resetActiveFileRenderSettings()"
@@ -501,21 +501,6 @@ watch(() => store.resumeStyle, () => {
           <span class="material-symbols-outlined text-[14px]">restart_alt</span>
           恢复默认
         </button>
-        <el-popconfirm
-        title="确定要覆盖保存当前模板吗？设置将持久化并覆盖原始属性。"
-        confirm-button-text="确定保存"
-        cancel-button-text="取消"
-        confirm-button-type="primary"
-        @confirm="store.persistActiveFileRenderState()"
-        width="280"
-      >
-        <template #reference>
-          <button class="text-xs flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
-            <span class="material-symbols-outlined text-[14px]">save</span>
-            覆盖模板
-          </button>
-        </template>
-      </el-popconfirm>
       </div>
 
       <!-- Right: Page count -->

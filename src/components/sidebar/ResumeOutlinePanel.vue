@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useResumeStore } from '../../stores/resume'
+import { useResumeStore } from '@resume-store'
 import ResumeOutlineTree from './ResumeOutlineTree.vue'
 
 const store = useResumeStore()
@@ -37,7 +37,7 @@ const handleReorder = async (payload: { nodeId: string; targetIndex: number; par
         <span class="material-symbols-outlined text-3xl">segment</span>
         <p class="text-sm font-medium">未检测到二级、三级或四级标题</p>
         <p class="text-xs leading-5">
-          你可以在正文中使用 <code>##</code>、<code>###</code>、<code>####</code> 来建立可拖拽的大纲结构。
+          你可以在正文中使用 <code>##</code>、<code>###</code>、<code>####</code> 建立可拖拽的大纲结构。
         </p>
       </section>
 

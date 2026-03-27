@@ -33,6 +33,7 @@ components.d.ts
 
 # Temporary / Temp
 /tmp
+.tmp-chrome-profile*
 *.temp
 max_md2cv_temp.html
 
