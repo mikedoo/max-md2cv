@@ -18,6 +18,11 @@ export interface ResumeStyle {
   fontFamily: string;
   fontSize: number;
   paragraphSpacing: number;
+  h2MarginTop: number;
+  h2MarginBottom: number;
+  h3MarginTop: number;
+  h3MarginBottom: number;
+  personalHeaderSpacing: number;
   h1Size: number;
   h2Size: number;
   h3Size: number;

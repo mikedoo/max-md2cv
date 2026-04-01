@@ -1,14 +1,18 @@
 import { buildSelfContainedExportStyles } from "./exportStyles";
 import { getInlinePingFangFontFaceCss } from "./fontAssets";
+import { buildRuntimeResumeStyleCss } from "./runtimeResumeStyle";
+import type { ResumeStyle } from "@resume-core";
 
 interface PagedExportDocumentOptions {
   documentTitle: string;
   pagesContainer: HTMLElement;
+  cvStyle: ResumeStyle;
 }
 
 export const buildPagedExportDocumentHtml = async ({
   documentTitle,
   pagesContainer,
+  cvStyle,
 }: PagedExportDocumentOptions) => {
   const styles = await buildSelfContainedExportStyles();
   const inlinePingFangFontFaceCss = await getInlinePingFangFontFaceCss();
@@ -30,10 +34,20 @@ export const buildPagedExportDocumentHtml = async ({
       ${styles}
       <style>
         ${inlinePingFangFontFaceCss}
+        ${buildRuntimeResumeStyleCss(cvStyle, { includePageRule: false })}
+        @page {
+          size: A4;
+          margin: 0 !important;
+        }
+        html,
         body {
           background: white !important;
           margin: 0;
           padding: 0;
+        }
+        body {
+          width: auto !important;
+          height: auto !important;
         }
         .pagedjs-wrapper {
           width: 100% !important;
@@ -45,9 +59,48 @@ export const buildPagedExportDocumentHtml = async ({
         .pagedjs_page {
           box-shadow: none !important;
         }
+        @media print {
+          html,
+          body {
+            width: auto !important;
+            height: auto !important;
+            min-width: 0 !important;
+            max-width: none !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .pagedjs_pages {
+            display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .pagedjs_page {
+            width: var(--pagedjs-width) !important;
+            height: var(--pagedjs-height) !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            break-after: page;
+            page-break-after: always;
+          }
+          .pagedjs_page:last-child {
+            break-after: auto;
+            page-break-after: auto;
+          }
+          .pagedjs_sheet {
+            width: var(--pagedjs-width) !important;
+            height: var(--pagedjs-height) !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: hidden !important;
+          }
+        }
       </style>
     </head>
-    <body class="resume-document">
+    <body>
       <div class="pagedjs-wrapper">
         ${exportedPagesContainer.outerHTML}
       </div>

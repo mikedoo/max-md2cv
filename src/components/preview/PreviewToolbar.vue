@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import SoftSelect from '../shared/SoftSelect.vue'
 import { useResumeStore } from '@resume-store'
+import { RESUME_STYLE_LIMITS } from '../../utils/templateStyle'
 
 defineProps<{
   zoomLevel: number
@@ -230,10 +231,40 @@ const handleThemeColorHexInput = (event: Event) => {
             <el-slider v-model="store.resumeStyle.lineHeight" :min="1.0" :max="2.5" :step="0.1" :show-tooltip="false" />
 
             <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
-              <span>段落间距</span>
+              <span>正文块间距</span>
               <span class="text-primary">{{ store.resumeStyle.paragraphSpacing }}px</span>
             </div>
-            <el-slider v-model="store.resumeStyle.paragraphSpacing" :min="0" :max="24" :step="1" :show-tooltip="false" />
+            <el-slider v-model="store.resumeStyle.paragraphSpacing" :min="RESUME_STYLE_LIMITS.paragraphSpacing.min" :max="RESUME_STYLE_LIMITS.paragraphSpacing.max" :step="1" :show-tooltip="false" />
+
+            <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
+              <span>H2 上边距</span>
+              <span class="text-primary">{{ store.resumeStyle.h2MarginTop }}px</span>
+            </div>
+            <el-slider v-model="store.resumeStyle.h2MarginTop" :min="RESUME_STYLE_LIMITS.h2MarginTop.min" :max="RESUME_STYLE_LIMITS.h2MarginTop.max" :step="1" :show-tooltip="false" />
+
+            <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
+              <span>H2 下边距</span>
+              <span class="text-primary">{{ store.resumeStyle.h2MarginBottom }}px</span>
+            </div>
+            <el-slider v-model="store.resumeStyle.h2MarginBottom" :min="RESUME_STYLE_LIMITS.h2MarginBottom.min" :max="RESUME_STYLE_LIMITS.h2MarginBottom.max" :step="1" :show-tooltip="false" />
+
+            <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
+              <span>H3 上边距</span>
+              <span class="text-primary">{{ store.resumeStyle.h3MarginTop }}px</span>
+            </div>
+            <el-slider v-model="store.resumeStyle.h3MarginTop" :min="RESUME_STYLE_LIMITS.h3MarginTop.min" :max="RESUME_STYLE_LIMITS.h3MarginTop.max" :step="1" :show-tooltip="false" />
+
+            <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
+              <span>H3 下边距</span>
+              <span class="text-primary">{{ store.resumeStyle.h3MarginBottom }}px</span>
+            </div>
+            <el-slider v-model="store.resumeStyle.h3MarginBottom" :min="RESUME_STYLE_LIMITS.h3MarginBottom.min" :max="RESUME_STYLE_LIMITS.h3MarginBottom.max" :step="1" :show-tooltip="false" />
+
+            <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
+              <span>个人信息栏底部间距</span>
+              <span class="text-primary">{{ store.resumeStyle.personalHeaderSpacing }}px</span>
+            </div>
+            <el-slider v-model="store.resumeStyle.personalHeaderSpacing" :min="RESUME_STYLE_LIMITS.personalHeaderSpacing.min" :max="RESUME_STYLE_LIMITS.personalHeaderSpacing.max" :step="1" :show-tooltip="false" />
 
             <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
               <span>上下页边距</span>

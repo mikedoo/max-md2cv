@@ -121,6 +121,11 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     --cv-theme-color: ${cvStyle.themeColor};
     --cv-font-size: ${cvStyle.fontSize}px;
     --cv-paragraph-spacing: ${cvStyle.paragraphSpacing}px;
+    --cv-h2-margin-top: ${cvStyle.h2MarginTop}px;
+    --cv-h2-margin-bottom: ${cvStyle.h2MarginBottom}px;
+    --cv-h3-margin-top: ${cvStyle.h3MarginTop}px;
+    --cv-h3-margin-bottom: ${cvStyle.h3MarginBottom}px;
+    --cv-personal-header-spacing: ${cvStyle.personalHeaderSpacing}px;
     font-family: ${cvStyle.fontFamily} !important;
     font-size: ${cvStyle.fontSize}px !important;
     line-height: ${cvStyle.lineHeight} !important;
@@ -209,10 +214,14 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     color: ${cvStyle.themeColor} !important;
     border-bottom-color: ${cvStyle.themeColor} !important;
     border-left-color: ${cvStyle.themeColor} !important;
+    margin-top: var(--cv-h2-margin-top) !important;
+    margin-bottom: var(--cv-h2-margin-bottom) !important;
   }
   .resume-document h3 {
     font-size: ${cvStyle.h3Size}px !important;
     color: ${cvStyle.themeColor} !important;
+    margin-top: var(--cv-h3-margin-top) !important;
+    margin-bottom: var(--cv-h3-margin-bottom) !important;
   }
   .resume-document .experience-line {
     display: flex;
@@ -252,7 +261,19 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
   .resume-document ul,
   .resume-document ol,
   .resume-document blockquote {
-    margin-bottom: var(--cv-paragraph-spacing);
+    margin-top: 0 !important;
+    margin-bottom: var(--cv-paragraph-spacing) !important;
+  }
+  .resume-document li {
+    margin-bottom: calc(var(--cv-paragraph-spacing) * 0.5) !important;
+  }
+  .resume-document .personal-header {
+    margin-bottom: var(--cv-personal-header-spacing) !important;
+  }
+  .resume-document .contact-info--text,
+  .resume-document .contact-info--icon,
+  .resume-document .job-intention + p {
+    margin-bottom: 0 !important;
   }
   .resume-document .contact-info-item::before {
     content: "";

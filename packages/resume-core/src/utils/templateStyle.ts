@@ -3,11 +3,62 @@ import type { ResumeStyle } from "../types/resume";
 const DEFAULT_THEME_COLOR = "#4c49cc";
 const DEFAULT_FONT_FAMILY = '"PingFang SC", "Microsoft YaHei", sans-serif';
 
+export const RESUME_STYLE_LIMITS = {
+  paragraphSpacing: { min: 0, max: 20 },
+  h2MarginTop: { min: 2, max: 24 },
+  h2MarginBottom: { min: 2, max: 24 },
+  h3MarginTop: { min: 2, max: 12 },
+  h3MarginBottom: { min: 2, max: 12 },
+  personalHeaderSpacing: { min: 2, max: 12 },
+} as const;
+
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+const clampResumeStyle = (style: ResumeStyle): ResumeStyle => ({
+  ...style,
+  paragraphSpacing: clamp(
+    style.paragraphSpacing,
+    RESUME_STYLE_LIMITS.paragraphSpacing.min,
+    RESUME_STYLE_LIMITS.paragraphSpacing.max,
+  ),
+  h2MarginTop: clamp(
+    style.h2MarginTop,
+    RESUME_STYLE_LIMITS.h2MarginTop.min,
+    RESUME_STYLE_LIMITS.h2MarginTop.max,
+  ),
+  h2MarginBottom: clamp(
+    style.h2MarginBottom,
+    RESUME_STYLE_LIMITS.h2MarginBottom.min,
+    RESUME_STYLE_LIMITS.h2MarginBottom.max,
+  ),
+  h3MarginTop: clamp(
+    style.h3MarginTop,
+    RESUME_STYLE_LIMITS.h3MarginTop.min,
+    RESUME_STYLE_LIMITS.h3MarginTop.max,
+  ),
+  h3MarginBottom: clamp(
+    style.h3MarginBottom,
+    RESUME_STYLE_LIMITS.h3MarginBottom.min,
+    RESUME_STYLE_LIMITS.h3MarginBottom.max,
+  ),
+  personalHeaderSpacing: clamp(
+    style.personalHeaderSpacing,
+    RESUME_STYLE_LIMITS.personalHeaderSpacing.min,
+    RESUME_STYLE_LIMITS.personalHeaderSpacing.max,
+  ),
+});
+
 export const createDefaultResumeStyle = (): ResumeStyle => ({
   themeColor: DEFAULT_THEME_COLOR,
   fontFamily: DEFAULT_FONT_FAMILY,
   fontSize: 14,
   paragraphSpacing: 8,
+  h2MarginTop: 14,
+  h2MarginBottom: 8,
+  h3MarginTop: 12,
+  h3MarginBottom: 4,
+  personalHeaderSpacing: 12,
   h1Size: 28,
   h2Size: 20,
   h3Size: 16,
@@ -21,10 +72,11 @@ export const createDefaultResumeStyle = (): ResumeStyle => ({
 
 export const cloneResumeStyle = (
   style?: Partial<ResumeStyle> | null,
-): ResumeStyle => ({
-  ...createDefaultResumeStyle(),
-  ...style,
-});
+): ResumeStyle =>
+  clampResumeStyle({
+    ...createDefaultResumeStyle(),
+    ...style,
+  });
 
 export const normalizeFontFamily = (fontFamily?: string | null): string => {
   const resolvedFontFamily = (fontFamily ?? "").replace(
@@ -263,6 +315,13 @@ export const parseResumeStyleFromTemplateCss = (css: string): ResumeStyle => {
   );
   const dateSize = toNum(dateSizeRaw, fallback.dateSize ?? fallback.fontSize);
 
+  const contactRenderMode = extractCssProp(
+    css,
+    ".resume-document",
+    "--cv-contact-render",
+    fallback.personalInfoMode ?? "text",
+  );
+
   const paragraphSpacingRaw = extractCssProp(
     css,
     ".resume-document",
@@ -276,6 +335,88 @@ export const parseResumeStyleFromTemplateCss = (css: string): ResumeStyle => {
   );
   const paragraphSpacing = toNum(paragraphSpacingRaw, fallback.paragraphSpacing);
 
+  const h2MarginTopRaw = extractCssProp(
+    css,
+    ".resume-document",
+    "--cv-h2-margin-top",
+    extractCssProp(
+      css,
+      ".resume-document h2",
+      "margin-top",
+      `${fallback.h2MarginTop}px`,
+    ),
+  );
+  const h2MarginTop = toNum(h2MarginTopRaw, fallback.h2MarginTop);
+
+  const h2MarginBottomRaw = extractCssProp(
+    css,
+    ".resume-document",
+    "--cv-h2-margin-bottom",
+    extractCssProp(
+      css,
+      ".resume-document h2",
+      "margin-bottom",
+      `${fallback.h2MarginBottom}px`,
+    ),
+  );
+  const h2MarginBottom = toNum(h2MarginBottomRaw, fallback.h2MarginBottom);
+
+  const h3MarginTopRaw = extractCssProp(
+    css,
+    ".resume-document",
+    "--cv-h3-margin-top",
+    extractCssProp(
+      css,
+      ".resume-document h3",
+      "margin-top",
+      `${fallback.h3MarginTop}px`,
+    ),
+  );
+  const h3MarginTop = toNum(h3MarginTopRaw, fallback.h3MarginTop);
+
+  const h3MarginBottomRaw = extractCssProp(
+    css,
+    ".resume-document",
+    "--cv-h3-margin-bottom",
+    extractCssProp(
+      css,
+      ".resume-document h3",
+      "margin-bottom",
+      `${fallback.h3MarginBottom}px`,
+    ),
+  );
+  const h3MarginBottom = toNum(h3MarginBottomRaw, fallback.h3MarginBottom);
+
+  const personalInfoSpacingFallbackSelector =
+    contactRenderMode === "icon"
+      ? ".resume-document .contact-info--icon"
+      : ".resume-document .contact-info--text";
+  const personalHeaderSpacingRaw = extractCssProp(
+    css,
+    ".resume-document",
+    "--cv-personal-header-spacing",
+    extractCssProp(
+      css,
+      ".resume-document .personal-header",
+      "margin-bottom",
+      extractCssProp(
+        css,
+        personalInfoSpacingFallbackSelector,
+        "margin-bottom",
+        extractCssProp(
+          css,
+          ".resume-document .job-intention + p",
+          "margin-bottom",
+          `${fallback.personalHeaderSpacing}px`,
+        ),
+      ),
+    ),
+  );
+  const personalHeaderSpacing = toNum(
+    personalHeaderSpacingRaw,
+    fallback.personalHeaderSpacing,
+  );
+
   const pageMarginRaw = extractCssProp(
     css,
     "@page",
@@ -288,14 +429,7 @@ export const parseResumeStyleFromTemplateCss = (css: string): ResumeStyle => {
   const marginH =
     marginParts.length >= 2 ? parseFloat(marginParts[1] ?? "0") : fallback.marginH;
 
-  const contactRenderMode = extractCssProp(
-    css,
-    ".resume-document",
-    "--cv-contact-render",
-    fallback.personalInfoMode ?? "text",
-  );
-
-  return {
+  return clampResumeStyle({
     ...fallback,
     lineHeight: Number.isNaN(lineHeight) ? fallback.lineHeight : lineHeight,
     fontFamily,
@@ -307,8 +441,13 @@ export const parseResumeStyleFromTemplateCss = (css: string): ResumeStyle => {
     dateWeight,
     dateSize,
     paragraphSpacing,
+    h2MarginTop,
+    h2MarginBottom,
+    h3MarginTop,
+    h3MarginBottom,
+    personalHeaderSpacing,
     marginV,
     marginH,
     personalInfoMode: contactRenderMode === "icon" ? "icon" : "text",
-  };
+  });
 };

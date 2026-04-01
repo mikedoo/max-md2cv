@@ -53,6 +53,7 @@ export const createExportModule = (context: ExportModuleContext) => {
       const htmlContent = await buildPagedExportDocumentHtml({
         documentTitle,
         pagesContainer: pagesContainer as HTMLElement,
+        cvStyle: state.resumeStyle.value,
       });
 
       await platform.invoke("export_pdf_command", {

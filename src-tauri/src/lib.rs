@@ -12,6 +12,26 @@ use tauri_plugin_opener::OpenerExt;
 
 const RENDER_STATE_FILE_NAME: &str = ".max-md2cv.render-state.json";
 
+fn default_h2_margin_top() -> f64 {
+    14.0
+}
+
+fn default_h2_margin_bottom() -> f64 {
+    8.0
+}
+
+fn default_h3_margin_top() -> f64 {
+    12.0
+}
+
+fn default_h3_margin_bottom() -> f64 {
+    4.0
+}
+
+fn default_personal_header_spacing() -> f64 {
+    12.0
+}
+
 #[derive(Serialize, Clone)]
 pub struct TemplateInfo {
     pub id: String,
@@ -43,6 +63,16 @@ struct ResumeStyleState {
     font_family: String,
     font_size: f64,
     paragraph_spacing: f64,
+    #[serde(default = "default_h2_margin_top")]
+    h2_margin_top: f64,
+    #[serde(default = "default_h2_margin_bottom")]
+    h2_margin_bottom: f64,
+    #[serde(default = "default_h3_margin_top")]
+    h3_margin_top: f64,
+    #[serde(default = "default_h3_margin_bottom")]
+    h3_margin_bottom: f64,
+    #[serde(default = "default_personal_header_spacing")]
+    personal_header_spacing: f64,
     h1_size: f64,
     h2_size: f64,
     h3_size: f64,

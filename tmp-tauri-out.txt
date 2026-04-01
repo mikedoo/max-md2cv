@@ -1,0 +1,32 @@
+
+> max-md2cv-app@0.1.1 tauri
+> tauri dev
+
+
+> max-md2cv-app@0.1.1 dev
+> vite
+
+
+  [32m[1mVITE[22m v6.4.1[39m  [2mready in [0m[1m769[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3000[22m/[39m
+[2m11:32:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ new dependencies optimized: [33melement-plus/es, element-plus/es/components/base/style/css, element-plus/es/components/dialog/style/css, element-plus/es/components/button/style/css, element-plus/es/components/form/style/css, element-plus/es/components/form-item/style/css, element-plus/es/components/input/style/css, element-plus/es/components/dropdown/style/css, element-plus/es/components/dropdown-menu/style/css, element-plus/es/components/dropdown-item/style/css, element-plus/es/components/option/style/css, element-plus/es/components/slider/style/css, element-plus/es/components/popover/style/css, element-plus/es/components/select/style/css[32m[39m
+[2m11:32:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ optimized dependencies changed. reloading[39m
+[2m11:32:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-tauri-err.txt[22m
+[2m11:32:44[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-tauri-out.txt[22m
+[2m11:32:45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ new dependencies optimized: [33melement-plus/es/components/tabs/style/css, element-plus/es/components/tab-pane/style/css, element-plus/es/components/popconfirm/style/css[32m[39m
+[2m11:32:45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ optimized dependencies changed. reloading[39m
+[2m11:32:46[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-tauri-out.txt[22m
+[2m11:33:06[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m11:33:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-tauri-out.txt[22m
+[2m11:33:06[22m [36m[1m[vite][22m[39m server restarted.
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4310[22m/[39m
+[2m11:33:42[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m11:33:42[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-tauri-out.txt[22m
+[2m11:33:42[22m [36m[1m[vite][22m[39m server restarted.
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m18080[22m/[39m
+[2m11:34:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-vite-out.txt[22m
+[2m11:34:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-vite-err.txt[22m
+[2m11:34:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mtmp-tauri-out.txt[22m
