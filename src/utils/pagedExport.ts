@@ -30,6 +30,7 @@ export const buildPagedExportDocumentHtml = async ({
     <html class="light" lang="zh-CN">
     <head>
       <meta charset="utf-8">
+      <meta name="max-md2cv-export-document" content="true">
       <title>${documentTitle}</title>
       ${styles}
       <style>
@@ -100,7 +101,7 @@ export const buildPagedExportDocumentHtml = async ({
         }
       </style>
     </head>
-    <body>
+    <body data-max-md2cv-export-document="true">
       <div class="pagedjs-wrapper">
         ${exportedPagesContainer.outerHTML}
       </div>
