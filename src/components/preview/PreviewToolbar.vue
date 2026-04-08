@@ -275,13 +275,13 @@ const isThemeColorSelected = (color: string) =>
               <span>上下页边距</span>
               <span class="text-primary">{{ store.resumeStyle.marginV }}mm</span>
             </div>
-            <el-slider v-model="store.resumeStyle.marginV" :min="0" :max="50" :step="1" :show-tooltip="false" />
+            <el-slider v-model="store.resumeStyle.marginV" :min="RESUME_STYLE_LIMITS.marginV.min" :max="RESUME_STYLE_LIMITS.marginV.max" :step="1" :show-tooltip="false" />
 
             <div class="mt-4 mb-2 flex justify-between text-xs font-bold text-on-surface-variant">
               <span>左右页边距</span>
               <span class="text-primary">{{ store.resumeStyle.marginH }}mm</span>
             </div>
-            <el-slider v-model="store.resumeStyle.marginH" :min="0" :max="50" :step="1" :show-tooltip="false" />
+            <el-slider v-model="store.resumeStyle.marginH" :min="RESUME_STYLE_LIMITS.marginH.min" :max="RESUME_STYLE_LIMITS.marginH.max" :step="1" :show-tooltip="false" />
           </div>
         </template>
       </el-dropdown>

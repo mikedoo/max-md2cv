@@ -10,6 +10,8 @@ export const RESUME_STYLE_LIMITS = {
   h3MarginTop: { min: 2, max: 12 },
   h3MarginBottom: { min: 2, max: 12 },
   personalHeaderSpacing: { min: 2, max: 24 },
+  marginV: { min: 8, max: 20 },
+  marginH: { min: 8, max: 20 },
 } as const;
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -46,6 +48,16 @@ const clampResumeStyle = (style: ResumeStyle): ResumeStyle => ({
     style.personalHeaderSpacing,
     RESUME_STYLE_LIMITS.personalHeaderSpacing.min,
     RESUME_STYLE_LIMITS.personalHeaderSpacing.max,
+  ),
+  marginV: clamp(
+    style.marginV,
+    RESUME_STYLE_LIMITS.marginV.min,
+    RESUME_STYLE_LIMITS.marginV.max,
+  ),
+  marginH: clamp(
+    style.marginH,
+    RESUME_STYLE_LIMITS.marginH.min,
+    RESUME_STYLE_LIMITS.marginH.max,
   ),
 });
 

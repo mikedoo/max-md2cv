@@ -163,6 +163,7 @@ fn insert_template(
 fn read_legacy_css_template(path: &Path) -> Result<TemplateInfo, String> {
     let css_content =
         fs::read_to_string(path).map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
+    let manifest = read_sidecar_manifest(path)?;
     let name = extract_meta(&css_content, "name").unwrap_or_else(|| {
         path.file_stem()
             .and_then(|s| s.to_str())
@@ -179,7 +180,7 @@ fn read_legacy_css_template(path: &Path) -> Result<TemplateInfo, String> {
         id,
         name,
         css: css_content,
-        manifest: None,
+        manifest,
     })
 }
 
@@ -222,6 +223,15 @@ fn read_template_manifest(path: &Path) -> Result<Value, String> {
         fs::read_to_string(path).map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
     serde_json::from_str::<Value>(&manifest_content)
         .map_err(|e| format!("Failed to parse manifest {:?}: {}", path, e))
+}
+
+fn read_sidecar_manifest(path: &Path) -> Result<Option<Value>, String> {
+    let manifest_path = path.with_extension("manifest.json");
+    if !manifest_path.exists() {
+        return Ok(None);
+    }
+
+    read_template_manifest(&manifest_path).map(Some)
 }
 
 /// Parse `/* @key: value */` style metadata from CSS content.

@@ -19,10 +19,12 @@ const templates = getBuiltinTemplates();
 const getDefaultResumeStyle = (templateId: string = DEFAULT_TEMPLATE_ID) => {
   const template = getBuiltinTemplateById(templateId);
 
-  return resolveTemplateManifest({
-    css: template?.css ?? "",
-    manifest: template?.manifest,
-  }).defaults!;
+  return cloneResumeStyle(
+    resolveTemplateManifest({
+      css: template?.css ?? "",
+      manifest: template?.manifest,
+    }).defaults,
+  );
 };
 
 const createDefaultDraft = (): WebPlaygroundDraft => ({
