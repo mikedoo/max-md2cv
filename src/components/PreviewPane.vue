@@ -299,7 +299,8 @@ const buildPreviewStyles = (cvStyle: ResumeStyle): string => `
     margin-bottom: calc(var(--cv-paragraph-spacing) * 0.5) !important;
   }
   .resume-document .personal-header {
-    margin-bottom: var(--cv-personal-header-spacing) !important;
+    margin-bottom: 0 !important;
+    padding-bottom: var(--cv-personal-header-spacing) !important;
   }
   .resume-document .contact-info--text,
   .resume-document .contact-info--icon,

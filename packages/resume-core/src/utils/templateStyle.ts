@@ -9,7 +9,7 @@ export const RESUME_STYLE_LIMITS = {
   h2MarginBottom: { min: 2, max: 24 },
   h3MarginTop: { min: 2, max: 12 },
   h3MarginBottom: { min: 2, max: 12 },
-  personalHeaderSpacing: { min: 2, max: 12 },
+  personalHeaderSpacing: { min: 2, max: 24 },
 } as const;
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -398,16 +398,21 @@ export const parseResumeStyleFromTemplateCss = (css: string): ResumeStyle => {
     extractCssProp(
       css,
       ".resume-document .personal-header",
-      "margin-bottom",
+      "padding-bottom",
       extractCssProp(
         css,
-        personalInfoSpacingFallbackSelector,
+        ".resume-document .personal-header",
         "margin-bottom",
         extractCssProp(
           css,
-          ".resume-document .job-intention + p",
+          personalInfoSpacingFallbackSelector,
           "margin-bottom",
-          `${fallback.personalHeaderSpacing}px`,
+          extractCssProp(
+            css,
+            ".resume-document .job-intention + p",
+            "margin-bottom",
+            `${fallback.personalHeaderSpacing}px`,
+          ),
         ),
       ),
     ),
