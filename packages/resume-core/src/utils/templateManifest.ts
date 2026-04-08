@@ -6,6 +6,7 @@ import type {
   TemplateFieldSchema,
   TemplateLayoutConfig,
   TemplateManifest,
+  TemplateSchemaPreset,
   TemplateValue,
   TemplateValues,
 } from "../types/resume";
@@ -275,6 +276,8 @@ export const DEFAULT_TEMPLATE_EDITOR_SCHEMA: TemplateFieldSchema[] = [
   },
 ];
 
+export const DEFAULT_TEMPLATE_SCHEMA_PRESET: TemplateSchemaPreset = "standard";
+
 const TEMPLATE_VALUE_KEYS = [
   "themeColor",
   "fontFamily",
@@ -370,13 +373,62 @@ const normalizeTemplateFeatures = (
   ...features,
 });
 
+const cloneTemplateFieldSchema = (field: TemplateFieldSchema): TemplateFieldSchema => ({
+  ...field,
+  options: field.options?.map((option) => ({ ...option })),
+});
+
+export const getTemplateSchemaPreset = (
+  preset?: TemplateSchemaPreset | null,
+): TemplateFieldSchema[] => {
+  switch (preset ?? DEFAULT_TEMPLATE_SCHEMA_PRESET) {
+    case "standard":
+    default:
+      return DEFAULT_TEMPLATE_EDITOR_SCHEMA.map(cloneTemplateFieldSchema);
+  }
+};
+
+const mergeTemplateFieldSchema = (
+  baseSchema: TemplateFieldSchema[],
+  overrides?: TemplateFieldSchema[] | null,
+): TemplateFieldSchema[] => {
+  if (!overrides?.length) {
+    return baseSchema.map(cloneTemplateFieldSchema);
+  }
+
+  const mergedSchema = baseSchema.map(cloneTemplateFieldSchema);
+
+  for (const override of overrides) {
+    const nextField = cloneTemplateFieldSchema(override);
+    const existingIndex = mergedSchema.findIndex((field) => field.key === nextField.key);
+
+    if (existingIndex >= 0) {
+      mergedSchema[existingIndex] = {
+        ...mergedSchema[existingIndex],
+        ...nextField,
+      };
+      continue;
+    }
+
+    mergedSchema.push(nextField);
+  }
+
+  return mergedSchema;
+};
+
 export const normalizeTemplateFieldSchema = (
   schema?: TemplateFieldSchema[] | null,
-): TemplateFieldSchema[] =>
-  (schema?.length ? schema : DEFAULT_TEMPLATE_EDITOR_SCHEMA).map((field) => ({
-    ...field,
-    options: field.options?.map((option) => ({ ...option })),
-  }));
+  options: {
+    preset?: TemplateSchemaPreset | null;
+    overrides?: TemplateFieldSchema[] | null;
+  } = {},
+): TemplateFieldSchema[] => {
+  const baseSchema = schema?.length
+    ? schema.map(cloneTemplateFieldSchema)
+    : getTemplateSchemaPreset(options.preset);
+
+  return mergeTemplateFieldSchema(baseSchema, options.overrides);
+};
 
 const sanitizeValueForField = (
   value: TemplateValue | undefined,
@@ -442,12 +494,16 @@ export const normalizeTemplateManifest = (
   manifest: Partial<TemplateManifest> &
     Pick<TemplateManifest, "id" | "name" | "entryCss">,
 ): TemplateManifest => {
+  const editorSchema = normalizeTemplateFieldSchema(manifest.editorSchema, {
+    preset: manifest.schemaPreset,
+    overrides: manifest.editorSchemaOverrides,
+  });
   const defaults = normalizeTemplateValues(
     {
       ...createDefaultTemplateValues(),
       ...toTemplateValues(manifest.defaults),
     },
-    normalizeTemplateFieldSchema(manifest.editorSchema),
+    editorSchema,
   );
   const layout = normalizeTemplateLayout(manifest.layout, defaults);
 
@@ -463,7 +519,9 @@ export const normalizeTemplateManifest = (
     entryCss: manifest.entryCss,
     description: manifest.description,
     defaults,
-    editorSchema: normalizeTemplateFieldSchema(manifest.editorSchema),
+    schemaPreset: manifest.schemaPreset,
+    editorSchema,
+    editorSchemaOverrides: manifest.editorSchemaOverrides?.map(cloneTemplateFieldSchema),
     features: normalizeTemplateFeatures(manifest.features),
     layout,
   };
@@ -494,7 +552,10 @@ export const createLegacyTemplateManifest = (
     version: "1.0.0",
     entryCss: "style.css",
     defaults,
-    editorSchema: normalizeTemplateFieldSchema(DEFAULT_TEMPLATE_EDITOR_SCHEMA),
+    schemaPreset: DEFAULT_TEMPLATE_SCHEMA_PRESET,
+    editorSchema: normalizeTemplateFieldSchema(undefined, {
+      preset: DEFAULT_TEMPLATE_SCHEMA_PRESET,
+    }),
     features: normalizeTemplateFeatures(undefined),
     layout,
   };
@@ -510,14 +571,20 @@ export const normalizeResumeTemplate = (
     version: template.version,
     entryCss: template.entryCss ?? "style.css",
     description: template.description,
+    schemaPreset: template.schemaPreset,
     defaults: template.defaults,
     editorSchema: template.editorSchema,
+    editorSchemaOverrides: template.editorSchemaOverrides,
     features: template.features,
     layout: template.layout,
   });
 
   return {
     ...manifest,
+    editorSchema: manifest.editorSchema ?? normalizeTemplateFieldSchema(undefined, {
+      preset: manifest.schemaPreset,
+      overrides: manifest.editorSchemaOverrides,
+    }),
     css: template.css,
   };
 };

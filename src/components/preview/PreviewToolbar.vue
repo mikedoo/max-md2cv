@@ -47,6 +47,11 @@ const HIDDEN_PREVIEW_FIELD_KEYS = new Set([
   'sectionTitlePreset',
 ])
 
+const SPECIAL_TOP_LEVEL_FIELD_KEYS = new Set([
+  'fontFamily',
+  'themeColor',
+])
+
 const handleTemplateChange = (templateId: string) => {
   store.setActiveTemplateForCurrentFile(templateId)
 }
@@ -55,7 +60,10 @@ const activeSchemaGroups = computed(() => {
   const groups = new Map<string, TemplateFieldSchema[]>()
 
   for (const field of store.currentTemplate?.editorSchema ?? []) {
-    if (HIDDEN_PREVIEW_FIELD_KEYS.has(field.key)) {
+    if (
+      HIDDEN_PREVIEW_FIELD_KEYS.has(field.key) ||
+      SPECIAL_TOP_LEVEL_FIELD_KEYS.has(field.key)
+    ) {
       continue
     }
 
@@ -73,6 +81,14 @@ const activeSchemaGroups = computed(() => {
     fields,
   })).filter(group => group.fields.length > 0)
 })
+
+const fontField = computed(
+  () => store.currentTemplate?.editorSchema.find(field => field.key === 'fontFamily') ?? null,
+)
+
+const themeColorField = computed(
+  () => store.currentTemplate?.editorSchema.find(field => field.key === 'themeColor') ?? null,
+)
 
 const getFieldValue = (field: TemplateFieldSchema): TemplateValue => {
   const overrideValue = store.templateValues?.[field.key]
@@ -138,6 +154,91 @@ const isSegmentedSelectField = (field: TemplateFieldSchema) =>
     </div>
 
     <div class="preview-toolbar-center flex flex-1 items-center justify-center gap-3">
+      <SoftSelect
+        v-if="fontField"
+        class="preview-toolbar-font-select"
+        :model-value="String(getFieldValue(fontField))"
+        width="108px"
+        placeholder="字体"
+        @update:model-value="setFieldValue(fontField.key, $event as string)"
+      >
+        <el-option
+          v-for="option in fontField.options ?? []"
+          :key="String(option.value)"
+          :label="option.label"
+          :value="String(option.value)"
+        />
+      </SoftSelect>
+
+      <el-popover
+        v-if="themeColorField"
+        placement="bottom"
+        trigger="click"
+        :width="240"
+        popper-class="preview-toolbar-popper preview-toolbar-theme-popper"
+      >
+        <template #reference>
+          <div class="preview-toolbar-icon cursor-pointer" :title="themeColorField.label">
+            <div
+              class="preview-theme-trigger-indicator h-4 w-4 rounded-full border border-outline-variant/50 shadow-inner"
+              :style="{ backgroundColor: String(getFieldValue(themeColorField)) }"
+            ></div>
+          </div>
+        </template>
+
+        <div class="preview-toolbar-panel preview-theme-panel flex flex-col gap-3 font-sans">
+          <div class="flex items-center justify-between text-xs font-bold text-on-surface-variant">
+            <span>{{ themeColorField.label }}</span>
+          </div>
+
+          <div class="preview-theme-grid">
+            <button
+              v-for="color in THEME_COLORS"
+              :key="color"
+              type="button"
+              class="preview-theme-swatch"
+              :class="{ 'is-active': isThemeColorSelected(themeColorField, color) }"
+              :style="{ backgroundColor: color }"
+              @click="setFieldValue(themeColorField.key, color)"
+            >
+              <span
+                v-if="isThemeColorSelected(themeColorField, color)"
+                class="material-symbols-outlined text-[16px] text-white drop-shadow-md"
+              >
+                check
+              </span>
+            </button>
+          </div>
+
+          <div class="preview-theme-custom-row">
+            <label class="preview-theme-custom-trigger">
+              <div
+                class="absolute inset-0 z-0 rounded-full"
+                :style="{ backgroundColor: String(getFieldValue(themeColorField)) }"
+              ></div>
+              <span class="material-symbols-outlined pointer-events-none z-10 text-[18px] text-white/80 drop-shadow">colorize</span>
+              <input
+                :value="String(getFieldValue(themeColorField))"
+                type="color"
+                class="preview-theme-native-input"
+                @input="setFieldValue(themeColorField.key, ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+
+            <div class="preview-theme-hex-field">
+              <span class="mr-1 font-mono text-xs text-on-surface-variant/50">#</span>
+              <input
+                type="text"
+                :value="String(getFieldValue(themeColorField)).replace('#', '')"
+                class="preview-theme-hex-input"
+                maxlength="6"
+                @input="handleThemeColorHexInput(themeColorField.key, $event)"
+              />
+            </div>
+          </div>
+        </div>
+      </el-popover>
+
       <el-dropdown
         v-for="group in activeSchemaGroups"
         :key="group.name"
@@ -395,6 +496,11 @@ const isSegmentedSelectField = (field: TemplateFieldSchema) =>
   max-height: min(70vh, 640px);
   overflow-y: auto;
   border-radius: 1rem;
+}
+
+.preview-theme-panel {
+  gap: 0.875rem;
+  padding: 0.25rem;
 }
 
 .preview-field-stack {

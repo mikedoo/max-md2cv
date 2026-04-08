@@ -23,6 +23,8 @@ export type TemplateFieldType =
   | "boolean"
   | "text";
 
+export type TemplateSchemaPreset = "standard";
+
 export interface TemplateOption {
   label: string;
   value: TemplateValue;
@@ -62,7 +64,9 @@ export interface TemplateManifest {
   entryCss: string;
   description?: string;
   defaults: TemplateValues;
-  editorSchema: TemplateFieldSchema[];
+  schemaPreset?: TemplateSchemaPreset;
+  editorSchema?: TemplateFieldSchema[];
+  editorSchemaOverrides?: TemplateFieldSchema[];
   features?: TemplateFeatures;
   layout?: Partial<TemplateLayoutConfig>;
 }
@@ -88,7 +92,8 @@ export interface ResumeStyle {
   personalInfoMode?: PersonalInfoMode;
 }
 
-export interface ResumeTemplate extends TemplateManifest {
+export interface ResumeTemplate extends Omit<TemplateManifest, "editorSchema"> {
+  editorSchema: TemplateFieldSchema[];
   css: string;
 }
 

@@ -12,8 +12,10 @@ pub struct TemplateInfo {
     pub version: String,
     pub entry_css: String,
     pub description: Option<String>,
+    pub schema_preset: Option<String>,
     pub defaults: Value,
     pub editor_schema: Value,
+    pub editor_schema_overrides: Option<Value>,
     pub features: Option<Value>,
     pub layout: Option<Value>,
     pub css: String,
@@ -27,8 +29,10 @@ struct TemplateManifestFile {
     version: Option<String>,
     entry_css: Option<String>,
     description: Option<String>,
+    schema_preset: Option<String>,
     defaults: Option<Value>,
     editor_schema: Option<Value>,
+    editor_schema_overrides: Option<Value>,
     features: Option<Value>,
     layout: Option<Value>,
 }
@@ -112,17 +116,35 @@ pub async fn save_template_package(
         .map_err(|e| format!("Failed to write template {:?}: {}", css_path, e))?;
 
     let manifest_path = template_dir.join("template.json");
-    let manifest = serde_json::json!({
-        "id": template.id,
-        "name": template.name,
-        "version": template.version,
-        "entryCss": template.entry_css,
-        "description": template.description,
-        "defaults": template.defaults,
-        "editorSchema": template.editor_schema,
-        "features": template.features,
-        "layout": template.layout,
-    });
+    let mut manifest = serde_json::Map::new();
+    manifest.insert("id".into(), Value::String(template.id));
+    manifest.insert("name".into(), Value::String(template.name));
+    manifest.insert("version".into(), Value::String(template.version));
+    manifest.insert("entryCss".into(), Value::String(template.entry_css));
+    manifest.insert("defaults".into(), template.defaults);
+
+    if let Some(description) = template.description {
+        manifest.insert("description".into(), Value::String(description));
+    }
+
+    if let Some(schema_preset) = template.schema_preset {
+        manifest.insert("schemaPreset".into(), Value::String(schema_preset));
+    } else {
+        manifest.insert("editorSchema".into(), template.editor_schema);
+    }
+
+    if let Some(editor_schema_overrides) = template.editor_schema_overrides {
+        manifest.insert("editorSchemaOverrides".into(), editor_schema_overrides);
+    }
+
+    if let Some(features) = template.features {
+        manifest.insert("features".into(), features);
+    }
+
+    if let Some(layout) = template.layout {
+        manifest.insert("layout".into(), layout);
+    }
+
     let manifest_content = serde_json::to_string_pretty(&manifest)
         .map_err(|e| format!("Failed to serialize manifest {:?}: {}", manifest_path, e))?;
     fs::write(&manifest_path, manifest_content)
@@ -205,8 +227,10 @@ fn read_legacy_css_template(path: &Path) -> Result<TemplateInfo, String> {
         version: "1.0.0".to_string(),
         entry_css: "style.css".to_string(),
         description: None,
+        schema_preset: None,
         defaults: Value::Object(Default::default()),
         editor_schema: Value::Array(Vec::new()),
+        editor_schema_overrides: None,
         features: None,
         layout: None,
         css: css_content,
@@ -235,8 +259,10 @@ fn read_template_package(path: &Path) -> Result<Option<TemplateInfo>, String> {
         version: manifest.version.unwrap_or_else(|| "1.0.0".to_string()),
         entry_css,
         description: manifest.description,
+        schema_preset: manifest.schema_preset,
         defaults: manifest.defaults.unwrap_or_else(|| Value::Object(Default::default())),
         editor_schema: manifest.editor_schema.unwrap_or_else(|| Value::Array(Vec::new())),
+        editor_schema_overrides: manifest.editor_schema_overrides,
         features: manifest.features,
         layout: manifest.layout,
         css: css_content,
