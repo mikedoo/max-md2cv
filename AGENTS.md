@@ -35,7 +35,7 @@ This file defines project rules for agents working in this repository.
 - If a feature depends on OS integration, implement it through Tauri/Rust rather than browser-only workarounds.
 
 ## Template And Styling Rules
-- Desktop template assets live under `src/assets/templates`; shared built-in templates and theme helpers also exist in `packages/resume-core/src`.
+- Built-in template assets live under `packages/resume-core/src/assets/templates`; desktop and Web both consume this shared source.
 - User template behavior must remain compatible with the current template loading and override model.
 - Respect the existing `/* @user-overrides */` convention when updating template merge behavior.
 - Keep the preview and export styling model consistent so preview behavior remains a useful approximation of final PDF output.
@@ -63,4 +63,4 @@ This file defines project rules for agents working in this repository.
 - Desktop store implementation: `src/stores/resume`
 - Web store: `apps/web/src/stores`
 - Tauri backend: `src-tauri/src/lib.rs`
-- Desktop templates: `src/assets/templates`
+- Built-in templates: `packages/resume-core/src/assets/templates`

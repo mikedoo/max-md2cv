@@ -30,7 +30,13 @@ pub async fn list_templates(app: tauri::AppHandle) -> Result<Vec<TemplateInfo>, 
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         let dev_source_path = Path::new(&manifest_dir)
             .parent()
-            .map(|root| root.join("src").join("assets").join("templates"));
+            .map(|root| {
+                root.join("packages")
+                    .join("resume-core")
+                    .join("src")
+                    .join("assets")
+                    .join("templates")
+            });
         if let Some(dev_path) = dev_source_path {
             if dev_path.exists() {
                 load_templates_overriding(&dev_path, &mut templates)?;

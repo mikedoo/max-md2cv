@@ -1,4 +1,4 @@
-import defaultResumeTemplate from "../../../assets/templates/default-resume.md?raw";
+import defaultResumeTemplate from "../../../../packages/resume-core/src/assets/templates/default-resume.md?raw";
 import { DEFAULT_FILE_NAME, DEFAULT_MARKDOWN } from "../constants";
 import type { ResumeStoreBaseContext } from "../context";
 import { ensureMarkdownFileName, normalizePathKey } from "../path-utils";
