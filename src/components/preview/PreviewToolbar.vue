@@ -329,7 +329,7 @@ const getPhotoSliderValue = (key: typeof PHOTO_SLIDERS[number]['key']) =>
                 v-if="!store.photoBase64"
                 class="mt-2 text-[11px] leading-5 text-on-surface-variant/70"
               >
-                先在左侧照片库导入，或点击预览里的照片占位区添加。
+                可在左侧照片库导入，或点击证件照占位区添加
               </p>
             </div>
 

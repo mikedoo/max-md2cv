@@ -304,7 +304,12 @@ const renderPdfPreview = async (request: PreviewRenderRequest) => {
 
   const photoHtml = `
     <div class="resume-photo-wrapper" title="点击上传证件照 (最大1MB)">
-      ${request.photoBase64 ? `<img src="${request.photoBase64}" />` : '<div class="photo-placeholder-text"><span class="material-symbols-outlined" style="font-size: 24px; margin-bottom: 4px;">add_a_photo</span><br/><span>添加证件照</span></div>'}
+      ${request.photoBase64
+        ? `<img src="${request.photoBase64}" />`
+        : `<div class="photo-placeholder-text">
+            <span class="material-symbols-outlined photo-placeholder-icon">add_a_photo</span>
+            <span class="photo-placeholder-label">添加证件照</span>
+          </div>`}
     </div>
   `
 

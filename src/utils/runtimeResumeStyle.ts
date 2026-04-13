@@ -103,7 +103,7 @@ export const buildRuntimeResumeStyleCss = (
     border-radius: var(--cv-photo-radius);
     overflow: hidden;
   }
-  .resume-document > .resume-photo-wrapper.is-empty:hover {
+  .resume-document .resume-photo-wrapper.is-empty:hover {
     border-color: ${cvStyle.themeColor};
     background-color: color-mix(in srgb, ${cvStyle.themeColor} 5%, #f8f9fa);
   }
@@ -114,7 +114,7 @@ export const buildRuntimeResumeStyleCss = (
     overflow: visible;
     box-shadow: none;
   }
-  .resume-document > .resume-photo-wrapper.has-photo:hover {
+  .resume-document .resume-photo-wrapper.has-photo:hover {
     background: transparent;
     border: none;
     box-shadow: none;
@@ -135,7 +135,7 @@ export const buildRuntimeResumeStyleCss = (
     position: absolute;
     inset: 0;
   }
-  .resume-document > .resume-photo-wrapper .photo-placeholder-text {
+  .resume-document .resume-photo-wrapper .photo-placeholder-text {
     color: #adb5bd;
     font-size: 12px;
     text-align: center;
@@ -148,6 +148,16 @@ export const buildRuntimeResumeStyleCss = (
     height: 100%;
     padding: 12px;
     box-sizing: border-box;
+  }
+  .resume-document .resume-photo-wrapper .photo-placeholder-icon {
+    display: block;
+    font-size: 24px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .resume-document .resume-photo-wrapper .photo-placeholder-label {
+    display: block;
+    text-align: center;
   }
   .resume-document .dodge-photo:not(h2) {
     box-sizing: border-box;
